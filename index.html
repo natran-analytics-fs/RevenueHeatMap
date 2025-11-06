@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Houston Revenue by ZIP — Uploader Edition</title>
+<title>Houston Revenue by ZIP — Pages App (Auto-Publish)</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root{--bg:#0b0f19;--panel:#131a2a;--muted:#99a3b3;--text:#e8eefc;--accent:#6aa6ff;--chip:#1b2438}
@@ -20,17 +20,19 @@
   .col{flex:1 1 320px}
   .muted{color:var(--muted)}
   .chip{background:var(--chip);padding:6px 10px;border-radius:999px;border:1px solid #263252;font-size:12px;margin-right:6px}
-  #map{height:64vh;border-radius:12px;border:1px solid #223055}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:2px 6px; background:#121a2c; border:1px solid #1f2945; border-radius:6px}
   .btn{background:#16213a;color:var(--text);border:1px solid #29406d;padding:8px 10px;border-radius:10px;cursor:pointer}
   .btn.accent{background:var(--accent);color:#0b0f19;border-color:transparent}
+  .note{font-size:12px;color:#a9b5ca}
+  .tiny{font-size:12px}
+  input[type="file"]{display:block;margin-top:8px}
+  #map{height:64vh;border-radius:12px;border:1px solid #223055}
   table{width:100%;border-collapse:collapse;font-size:14px}
   th,td{padding:8px 10px;border-bottom:1px solid #1f2945;white-space:nowrap}
   th{position:sticky;top:0;background:#121a2c;text-align:left}
   .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
-  .note{font-size:12px;color:#a9b5ca}
-  .tiny{font-size:12px}
-  input[type="file"]{display:block;margin-top:8px}
-  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:2px 6px; background:#121a2c; border:1px solid #1f2945; border-radius:6px}
+  .warn{background:#291a1a;border:1px solid #623e3e;color:#ffbdbd;padding:8px 10px;border-radius:10px}
+  .ok{color:#4caf50}
 </style>
 </head>
 <body>
@@ -46,24 +48,26 @@
 <main>
   <!-- Upload / Status -->
   <section id="tab-upload" class="tab">
+    <div id="pub-warning" class="panel warn" style="display:none"></div>
+
     <div class="panel">
-      <h3>Upload Data (processed client-side; nothing is uploaded to servers)</h3>
+      <h3>Upload Data (processed client-side; auto-publishes small artifacts)</h3>
       <div class="row">
         <div class="col">
-          <h4>Billing (.csv / .xls / .xlsx)</h4>
-          <p class="tiny muted">Columns like <span class="kbd">Zip</span> / <span class="kbd">Zip Code</span> and <span class="kbd">Billed</span> / <span class="kbd">Revenue</span> are auto-detected.</p>
+          <h4>Billing (CSV / XLS / XLSX)</h4>
+          <p class="tiny muted">Upload <b>one or many</b> files. Columns like <span class="kbd">Zip</span> / <span class="kbd">Zip Code</span> and <span class="kbd">Billed</span> / <span class="kbd">Revenue</span> are auto-detected.</p>
           <input id="billing-files" type="file" accept=".csv,.xls,.xlsx" multiple />
           <div id="billing-status" class="tiny muted">No billing data in storage.</div>
         </div>
         <div class="col">
-          <h4>ZIP Shapes (Shapefile ZIP or GeoJSON)</h4>
-          <p class="tiny muted">Upload either a <span class="kbd">.zip</span> of a shapefile (ZCTA) or a <span class="kbd">.geojson</span>. The app will subset to the 8-county Houston area.</p>
-          <input id="zcta-file" type="file" accept=".zip,.geojson,.json" />
+          <h4>ZIP Shapes (Shapefile ZIPs or GeoJSON)</h4>
+          <p class="tiny muted">Upload <b>one or many</b> shapefile <span class="kbd">.zip</span> and/or <span class="kbd">.geojson</span> files. The app subsets to the 8-county Houston area and simplifies geometry.</p>
+          <input id="zcta-files" type="file" accept=".zip,.geojson,.json" multiple />
           <div id="zcta-status" class="tiny muted">No shapes in storage.</div>
         </div>
       </div>
       <div class="note" style="margin-top:8px">
-        Processed results are stored in your browser (IndexedDB). To make them visible to everyone, use <b>Publish processed data</b> below — this writes only the small artifacts to your repo (billing.json & simplified houston_zctas.geojson).
+        Processed results are stored in your browser (IndexedDB). After processing, the app will <b>auto-publish</b> the small artifacts to your repo (<code>/data/billing.json</code>, <code>/data/houston_zctas.geojson</code>, <code>/data/ranges.json</code>).
       </div>
     </div>
 
@@ -78,18 +82,13 @@
     </div>
 
     <div class="panel">
-      <h3>Publish processed data to GitHub (optional)</h3>
-      <p class="tiny muted">Publishes only <span class="kbd">/data/billing.json</span> and <span class="kbd">/data/houston_zctas.geojson</span> to your repo via GitHub API — keeps files small, bypassing the 25MB web upload limit.</p>
+      <h3>Status</h3>
       <div class="row">
-        <div class="col"><label class="tiny muted">Owner</label><input id="gh-owner" placeholder="your-github-user" class="btn" /></div>
-        <div class="col"><label class="tiny muted">Repo</label><input id="gh-repo" placeholder="your-repo" class="btn" /></div>
-        <div class="col"><label class="tiny muted">Branch</label><input id="gh-branch" value="main" class="btn" /></div>
-        <div class="col"><label class="tiny muted">Token</label><input id="gh-token" type="password" placeholder="ghp_xxx" class="btn" /></div>
+        <div class="col"><span class="chip" id="chip-bill">billing.json</span></div>
+        <div class="col"><span class="chip" id="chip-zcta">houston_zctas.geojson</span></div>
+        <div class="col"><span class="chip" id="chip-ranges">ranges.json</span></div>
       </div>
-      <div class="row" style="margin-top:8px">
-        <div class="col"><button id="publish" class="btn accent">Publish processed data → /data</button></div>
-        <div class="col tiny muted" id="publish-status"></div>
-      </div>
+      <div class="tiny muted" id="pub-status" style="margin-top:8px">Awaiting uploads…</div>
     </div>
   </section>
 
@@ -99,6 +98,7 @@
       <div class="tiny muted">Tiles: OpenStreetMap • Toggle ZIP labels</div>
       <label class="tiny"><input type="checkbox" id="toggle-labels" checked/> Show ZIP labels</label>
       <button id="refresh-map" class="btn" style="margin-left:8px">Refresh</button>
+      <span id="live-badge" class="tiny" style="margin-left:10px"></span>
     </div>
     <div id="map"></div>
   </section>
@@ -106,7 +106,7 @@
   <!-- Table -->
   <section id="tab-table" class="tab" hidden>
     <div class="panel">
-      <div class="tiny muted">ZIP → Revenue (from processed billing.json in your browser)</div>
+      <div class="tiny muted">ZIP → Revenue (from processed billing.json)</div>
       <button id="download-json" class="btn">Download billing.json</button>
     </div>
     <div style="overflow:auto;border:1px solid #223055;border-radius:10px">
@@ -126,17 +126,55 @@
 <script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval.iife.js"></script>
 
 <script>
-// Tabs
+/* =========================
+   0) PUBLISH CONFIG (AUTO)
+   =========================
+   ⚠️ Client-side token is visible to anyone who can load your page.
+   Use a fine-grained token limited to this repo and rotate it regularly.
+*/
+const PUBLISH_CFG = {
+  owner:  "natran-analytics-fs",
+  repo:   "RevenueHeatMap",
+  branch: "Main", // note: branch names are case-sensitive in API calls
+  token:  "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"
+};
+// If you want to override at runtime without editing the file, you can set localStorage:
+// localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"...",repo:"...",branch:"...",token:"..."}));
+const savedCfg = JSON.parse(localStorage.getItem("autoPublishCfg")||"null");
+if(savedCfg){ Object.assign(PUBLISH_CFG, savedCfg); }
+
+/* =========================
+   1) Tabs
+   ========================= */
 const tabs = document.querySelectorAll('nav button');
 const sections = { upload: document.getElementById('tab-upload'), map: document.getElementById('tab-map'), table: document.getElementById('tab-table') };
 tabs.forEach(b=> b.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); b.classList.add('active'); for(const [k,el] of Object.entries(sections)) el.hidden=(b.dataset.tab!==k); if(b.dataset.tab==='map') ensureMap(); if(b.dataset.tab==='table') renderTable(); });
 
+/* =========================
+   2) Storage & helpers
+   ========================= */
 const { set:dbSet, get:dbGet } = idbKeyval;
 const DB = { BILLING:'billing-local', ZCTA:'zcta-local', RANGES:'ranges' };
-
 const fmtUSD = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const nowISO = () => new Date().toISOString();
 
-// Color ranges
+function showPublishBanner(){
+  const warn = document.getElementById('pub-warning');
+  if(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token){
+    warn.style.display = 'none';
+    document.getElementById('live-badge').innerHTML = '<span class="chip">Auto-publish: <b class="ok">ON</b></span>';
+  } else {
+    warn.style.display = 'block';
+    warn.innerHTML = `Auto-publish is <b>OFF</b>. Set <span class="kbd">PUBLISH_CFG</span> (owner/repo/branch/token) or via:
+    <br><span class="kbd">localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"you",repo:"repo",branch:"main",token:"ghp_xxx"}))</span>`;
+    document.getElementById('live-badge').textContent = '';
+  }
+}
+showPublishBanner();
+
+/* =========================
+   3) Color ranges
+   ========================= */
 const DEFAULT_RANGES=[
   {min:2001,max:5000,color:'#FF0000'},
   {min:5001,max:15000,color:'#FFC0CB'},
@@ -155,7 +193,6 @@ document.getElementById('save-ranges').onclick=saveRanges;
   if(!r){ r={ranges:DEFAULT_RANGES, else:ELSE_COLOR}; await dbSet(DB.RANGES, r); }
   rangesDiv.innerHTML=''; (r.ranges||DEFAULT_RANGES).forEach(addRangeRow); addElseRow(r.else||ELSE_COLOR);
 })();
-
 function addRangeRow({min,max,color}){
   const row=document.createElement('div'); row.className='range-row';
   row.innerHTML=`<input type="number" value="${min}"/><input type="number" value="${max}"/><input type="color" value="${color}"/><button class="btn">Remove</button>`;
@@ -175,23 +212,19 @@ async function saveRanges(){
     const [a,b]=r.querySelectorAll('input[type=number]'); const c=r.querySelector('input[type=color]').value;
     out.push({min:Number(a.value), max:Number(b.value), color:c});
   }
-  await dbSet(DB.RANGES, {ranges:out, else:elseCol});
-  alert('Saved color ranges.');
-}
-async function getRanges(){
-  let r=await dbGet(DB.RANGES);
-  if(!r) r={ranges:DEFAULT_RANGES, else:ELSE_COLOR};
-  return r;
-}
-function pickColor(v, ranges, elseColor){
-  for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
-  if(v<=2000) return 'transparent';
-  return elseColor||'#1E90FF';
+  const cfg = {ranges:out, else:elseCol};
+  await dbSet(DB.RANGES, cfg);
+  document.getElementById('chip-ranges').textContent = 'ranges.json (local)';
+  // auto-publish ranges too
+  autoPublish({ ranges: cfg });
 }
 
-// Upload & process BILLING files
+/* =========================
+   4) Uploads — BILLING (multi)
+   ========================= */
 const billingInput=document.getElementById('billing-files');
 const billingStatus=document.getElementById('billing-status');
+
 billingInput.onchange = async (e)=>{
   const files=[...e.target.files];
   if(!files.length) return;
@@ -200,7 +233,6 @@ billingInput.onchange = async (e)=>{
     const buf=await f.arrayBuffer();
     let rows=[];
     if(/\.(csv)$/i.test(f.name)){
-      // simple CSV parse
       const text=new TextDecoder().decode(buf);
       rows=csvToRows(text);
     }else{
@@ -218,16 +250,16 @@ billingInput.onchange = async (e)=>{
   }
   const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
   await dbSet(DB.BILLING, list);
-  billingStatus.textContent = `Processed ${list.length} ZIP rows • stored locally.`;
-  alert('Billing processed and stored locally.');
+  billingStatus.textContent = `Processed ${files.length} file(s) • ${list.length} ZIP rows stored locally.`;
+  document.getElementById('chip-bill').textContent = 'billing.json (local)';
+  // auto-publish
+  autoPublish({ billing: list });
 };
 function csvToRows(text){
-  // tiny CSV parser for common cases
   const lines=text.split(/\r?\n/).filter(Boolean);
-  const head=lines.shift().split(',').map(s=>s.trim());
+  const head=splitCSV(lines.shift());
   return lines.map(ln=>{
-    const cols=splitCSV(ln);
-    const o={}; head.forEach((h,i)=>o[h]=cols[i]??''); return o;
+    const cols=splitCSV(ln); const o={}; head.forEach((h,i)=>o[h]=cols[i]??''); return o;
   });
 }
 function splitCSV(line){
@@ -241,39 +273,60 @@ function splitCSV(line){
   out.push(cur); return out.map(s=>s.trim());
 }
 
-// Upload & process SHAPEFILE / GEOJSON
-const zctaInput=document.getElementById('zcta-file');
+/* =========================
+   5) Uploads — ZCTA shapes (multi)
+   ========================= */
+const zctaInput=document.getElementById('zcta-files');
 const zctaStatus=document.getElementById('zcta-status');
+
 zctaInput.onchange = async (e)=>{
-  const f=e.target.files[0]; if(!f) return;
-  let gj=null;
-  if(/\.zip$/i.test(f.name)){
-    const buf=await f.arrayBuffer();
-    gj = await shp(buf); // convert to GeoJSON (FeatureCollection)
-  }else{
-    gj = JSON.parse(await f.text());
-  }
-  // Subset to the 8 Houston counties using a rough bbox or county union mask if provided later.
-  // Here we use a bbox around Houston to keep it simple and small.
-  const bbox = [-96.3, 28.8, -94.9, 30.3];
-  const clipped = turf.bboxClip(gj, bbox);
-  // Simplify to reduce size
-  const simplified = turf.simplify(clipped, {tolerance: 0.0008, highQuality:false, mutate:false});
-  // Normalize ZIP field name to ZCTA5CE10 if missing
-  simplified.features.forEach(f=>{
-    const p=f.properties||{};
-    if(!p.ZCTA5CE10){
-      p.ZCTA5CE10 = p.ZCTA5CE20 || p.GEOID10 || p.GEOID || p.zip || '';
+  const files=[...e.target.files];
+  if(!files.length) return;
+
+  const fcList=[];
+  for(const f of files){
+    if(/\.zip$/i.test(f.name)){
+      const buf=await f.arrayBuffer();
+      const fc=await shp(buf);
+      fcList.push(fc);
+    }else{
+      const fc=JSON.parse(await f.text());
+      fcList.push(fc);
     }
+  }
+
+  // Merge → FeatureCollection
+  const all = { type:'FeatureCollection', features: fcList.flatMap(fc => fc.features || []) };
+
+  // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
+  const bbox = [-96.3, 28.8, -94.9, 30.3];
+  const clipped = turf.bboxClip(all, bbox);
+
+  // Normalize & simplify
+  clipped.features.forEach(f=>{
+    const p=f.properties||{};
+    if(!p.ZCTA5CE10) p.ZCTA5CE10 = p.ZCTA5CE20 || p.GEOID10 || p.GEOID || p.zip || '';
     f.properties=p;
   });
+  const simplified = turf.simplify(clipped, {tolerance:0.0012, highQuality:false, mutate:false});
+
   await dbSet(DB.ZCTA, simplified);
-  zctaStatus.textContent = `Shapes stored locally • features: ${simplified.features.length}`;
-  alert('ZCTA shapes processed & stored locally.');
+  zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
+  document.getElementById('chip-zcta').textContent = 'houston_zctas.geojson (local)';
+  // auto-publish
+  autoPublish({ zcta: simplified });
 };
 
-// Map
+/* =========================
+   6) Map & Table
+   ========================= */
 let map, geoLayer, labelLayer;
+document.getElementById('refresh-map').onclick = ()=> drawChoropleth();
+document.getElementById('toggle-labels').onchange = ()=>{
+  if(!labelLayer) return;
+  const checked=document.getElementById('toggle-labels').checked;
+  if(checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
+};
 function ensureMap(){
   if(!map){
     map = L.map('map', { zoomControl:true, preferCanvas:true });
@@ -281,23 +334,29 @@ function ensureMap(){
   }
   drawChoropleth();
 }
-document.getElementById('refresh-map').onclick = ()=> drawChoropleth();
-document.getElementById('toggle-labels').onchange = ()=>{
-  if(!labelLayer) return;
-  const checked=document.getElementById('toggle-labels').checked;
-  if(checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
-};
 function centroid(geom){
   const polys = geom.type==='Polygon' ? [geom.coordinates] : geom.type==='MultiPolygon' ? geom.coordinates : null;
   if(!polys || !polys.length) return null;
   const ring = polys[0][0]; let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
   return [x/ring.length, y/ring.length];
 }
+function pickColor(v, ranges, elseColor){
+  for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
+  if(v<=2000) return 'transparent';
+  return elseColor||'#1E90FF';
+}
+async function getRanges(){
+  let r=await dbGet(DB.RANGES);
+  if(!r) r={ranges:DEFAULT_RANGES, else:ELSE_COLOR};
+  return r;
+}
 async function drawChoropleth(){
   const billing = await dbGet(DB.BILLING) || [];
   const zctas = await dbGet(DB.ZCTA);
   if(!billing.length || !zctas){ alert('Please upload & process billing and shapes first.'); return; }
-  const {ranges, else:elseColor} = await getRanges();
+  const cfg = await getRanges();
+  const ranges = cfg.ranges || []; const elseColor = cfg.else;
+
   const revByZip = new Map(billing.map(r=>[r.zip, r.revenue]));
 
   if(geoLayer) map.removeLayer(geoLayer);
@@ -326,8 +385,6 @@ async function drawChoropleth(){
   if(document.getElementById('toggle-labels').checked) labelLayer.addTo(map);
   try{ map.fitBounds(geoLayer.getBounds(), {padding:[20,20]}); }catch(e){}
 }
-
-// Table
 async function renderTable(){
   const billing = await dbGet(DB.BILLING) || [];
   const tbody = document.querySelector('#tbl tbody');
@@ -339,55 +396,71 @@ document.getElementById('download-json').onclick = async ()=>{
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'billing.json'; a.click(); URL.revokeObjectURL(a.href);
 };
 
-// Publish processed artifacts to GitHub
-async function publishToRepo(){
-  const owner = document.getElementById('gh-owner').value.trim();
-  const repo = document.getElementById('gh-repo').value.trim();
-  const branch = (document.getElementById('gh-branch').value.trim()||'main');
-  const token = document.getElementById('gh-token').value.trim();
-  const status = document.getElementById('publish-status');
-  if(!owner||!repo||!token){ status.textContent='Owner, repo, and token required.'; return; }
+/* =========================
+   7) Auto-publish (no prompts)
+   ========================= */
+async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
+  if(!(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token)){
+    document.getElementById('pub-status').textContent = 'Auto-publish skipped (no repo config).';
+    showPublishBanner();
+    return;
+  }
+  if(!billing) billing = await dbGet(DB.BILLING) || [];
+  if(!zcta)    zcta    = await dbGet(DB.ZCTA);
+  if(!ranges)  ranges  = await dbGet(DB.RANGES);
 
-  // 1) Gather processed small artifacts
-  const billing = await dbGet(DB.BILLING) || [];
-  const zctas = await dbGet(DB.ZCTA);
-  if(!billing.length || !zctas){ status.textContent='Process billing and shapes first.'; return; }
+  const pub = document.getElementById('pub-status');
+  if(!billing.length || !zcta || !ranges){
+    pub.textContent = 'Waiting for complete data (billing + shapes + ranges)…';
+    return;
+  }
 
-  // Simplify further to keep file tiny
-  const zSimple = turf.simplify(zctas, {tolerance:0.0012, highQuality:false});
+  const zSimple = turf.simplify(zcta, {tolerance:0.0012, highQuality:false});
+
   const payloads = [
-    { path:'data/billing.json', content: JSON.stringify(billing) },
-    { path:'data/houston_zctas.geojson', content: JSON.stringify(zSimple) },
+    { path:'data/billing.json',         content: JSON.stringify(billing) },
+    { path:'data/houston_zctas.geojson',content: JSON.stringify(zSimple) },
+    { path:'data/ranges.json',          content: JSON.stringify(ranges)  },
   ];
 
-  const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents/`;
+  const apiBase = `https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/`;
   async function putFile(p){
-    // get existing SHA (if any)
     let sha=null;
-    const head = await fetch(apiBase+p.path+`?ref=${branch}`);
+    const head = await fetch(apiBase+p.path+`?ref=${PUBLISH_CFG.branch}`);
     if(head.ok){ const j=await head.json(); sha=j.sha; }
     const res = await fetch(apiBase+p.path, {
       method:'PUT',
-      headers:{ 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json' },
+      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}`, 'Content-Type':'application/json' },
       body: JSON.stringify({
-        message: `Update ${p.path} from web app`,
+        message: `auto: update ${p.path} ${nowISO()}`,
         content: btoa(unescape(encodeURIComponent(p.content))),
-        branch, sha
+        branch: PUBLISH_CFG.branch,
+        sha
       })
     });
-    if(!res.ok){ throw new Error(`Failed to write ${p.path}: ${res.status}`); }
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error(`Publish failed for ${p.path}: ${res.status} ${t}`);
+    }
   }
 
   try{
-    status.textContent='Publishing…';
-    for(const p of payloads) await putFile(p);
-    status.textContent='Published! Refresh your Pages site to see updates.';
+    pub.textContent = 'Publishing updated data…';
+    for(const p of payloads) { await putFile(p); }
+    pub.textContent = 'Published ✔ — refresh your Pages site to see updates.';
   }catch(e){
     console.error(e);
-    status.textContent='Publish failed. Check token scope (contents: write) and branch.';
+    pub.textContent = 'Publish error. Check token (contents: write) and branch name.';
   }
 }
-document.getElementById('publish').onclick = publishToRepo;
+
+/* =========================
+   8) Init (try publishing if data already present)
+   ========================= */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  // If user already uploaded earlier in this browser, publish right away
+  autoPublish();
+});
 </script>
 </body>
 </html>
