@@ -462,31 +462,7 @@ zctaInput.onchange = async (e)=>{
         logStatus(`Failed to parse ${f.name}: ${err.message||err}`, {error:true});
       }
     }
-  }
 
-  // Merge → FeatureCollection
-  const allFeatures=[];
-  for(const fc of fcList){
-    if(!fc) continue;
-    if(Array.isArray(fc)){
-      allFeatures.push(...fc);
-    }else if(fc.type==='FeatureCollection'){
-      allFeatures.push(...(fc.features||[]));
-    }else if(fc.type==='Feature'){
-      allFeatures.push(fc);
-    }
-  }
-  if(!allFeatures.length){
-    zctaStatus.textContent = 'No valid polygon features found in uploads.';
-    return;
-  }
-  const all = { type:'FeatureCollection', features: allFeatures };
-
-  // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
-  const bbox = [-96.3, 28.8, -94.9, 30.3];
-  const clipped = turf.bboxClip(all, bbox);
-
-    // Merge → FeatureCollection
     const allFeatures=[];
     for(const fc of fcList){
       if(!fc) continue;
@@ -504,9 +480,8 @@ zctaInput.onchange = async (e)=>{
       logStatus('No polygon features detected — ensure the ZIP/ZCTA shapefile is selected.', {error:true});
       return;
     }
-    const all = { type:'FeatureCollection', features: valid };
 
-    // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
+    const all = { type:'FeatureCollection', features: valid };
     const bbox = [-96.3, 28.8, -94.9, 30.3];
     let clipped;
     try{
@@ -517,12 +492,17 @@ zctaInput.onchange = async (e)=>{
       clipped = all;
     }
 
-  await dbSet(DB.ZCTA, simplified);
-  await refreshLocalStatus();
-  zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
-  zctaInput.value='';
-  // auto-publish
-  autoPublish({ zcta: simplified });
+    const simplified = turf.simplify(clipped, { tolerance:0.0009, highQuality:false });
+    await dbSet(DB.ZCTA, simplified);
+    await refreshLocalStatus();
+    zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
+    logStatus(`Shapes saved (${simplified.features.length} features).`);
+    autoPublish({ zcta: simplified });
+    maybeAutoMap();
+  }finally{
+    zctaInput.value='';
+    zctaInput.disabled = false;
+  }
 };
 
 async function refreshLocalStatus(){
