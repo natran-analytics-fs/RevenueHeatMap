@@ -126,6 +126,67 @@
 <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval.iife.js"></script>
+<script>
+// Fallback for idb-keyval when CDN is unavailable (e.g. network blocks). This mirrors
+// the tiny API surface we use (get/set/del/clear/keys/update) so the rest of the app
+// continues to function client-side even if the CDN fails to load. Based on idb-keyval@6.
+if(!window.idbKeyval){
+  const DB_NAME = 'idb-keyval';
+  const STORE_NAME = 'keyval';
+  const openDatabase = () => new Promise((resolve, reject)=>{
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = ()=>{
+      if(!request.result.objectStoreNames.contains(STORE_NAME)){
+        request.result.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onerror = ()=> reject(request.error);
+    request.onsuccess = ()=> resolve(request.result);
+  });
+  const withStore = (mode, handler) => openDatabase().then(db=>new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE_NAME, mode);
+    const store = tx.objectStore(STORE_NAME);
+    let request;
+    let handledByPromise = false;
+    try {
+      request = handler(store);
+    } catch(err) {
+      reject(err);
+      tx.abort();
+      db.close();
+      return;
+    }
+    if(request && typeof request.then === 'function'){
+      handledByPromise = true;
+      request.then(value=>resolve(value)).catch(err=>{
+        tx.abort();
+        reject(err);
+      });
+    }
+    tx.oncomplete = ()=>{ db.close(); if(!handledByPromise) resolve(request?.result); };
+    tx.onabort = tx.onerror = ()=>{ const err = tx.error || new Error('IDB transaction aborted'); db.close(); reject(err); };
+  }));
+  const get = (key)=> withStore('readonly', store=>store.get(key));
+  const set = (key, value)=> withStore('readwrite', store=>store.put(value, key));
+  const del = (key)=> withStore('readwrite', store=>store.delete(key));
+  const clear = ()=> withStore('readwrite', store=>store.clear());
+  const keys = ()=> withStore('readonly', store=>{
+    return new Promise((resolve, reject)=>{
+      const out=[];
+      const req = store.openKeyCursor();
+      req.onsuccess = ()=>{
+        const cursor=req.result;
+        if(!cursor){ resolve(out); return; }
+        out.push(cursor.key);
+        cursor.continue();
+      };
+      req.onerror = ()=> reject(req.error);
+    });
+  });
+  const update = (key, updater)=> get(key).then(value=>Promise.resolve(updater(value)).then(newValue=>set(key, newValue)));
+  window.idbKeyval = { get, set, del, clear, keys, update };
+}
+</script>
 
 <script>
 /* =========================
