@@ -467,7 +467,7 @@
                 <div id="rangesList"></div>
                 <div class="range-row">
                     <span style="grid-column: 1 / 3; color: var(--text-muted);">Else (unmatched values)</span>
-                    <input type="color" class="color-input" id="elseColor" value="#6b7280">
+                    <input type="color" class="color-input" id="elseColor" value="#FFFFFF">
                 </div>
             </div>
 
@@ -500,15 +500,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/4.0.4/shp.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
 
     <script>
         // ============= CONFIGURATION =============
         const PUBLISH_CFG = {
-            owner: 'natran-analytics-fs',        // e.g., 'yourusername'
-            repo: 'RevenueHeatMap',         // e.g., 'houston-revenue'
+            owner: 'natran-analytics-fs',
+            repo: 'RevenueHeatMap',
             branch: 'main',
-            token: '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'         // GitHub Personal Access Token
+            token: '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'
         };
 
         const HOUSTON_BBOX = [-95.9, 29.5, -95.0, 30.2];
@@ -548,9 +547,6 @@
                 } catch (e) {
                     console.error('Storage error:', e);
                 }
-            },
-            del: async (key) => {
-                localStorage.removeItem(key);
             }
         };
 
@@ -564,73 +560,183 @@
             logEl.insertBefore(entry, logEl.firstChild);
         }
 
-        // ============= UI INITIALIZATION =============
-        function initUI() {
-            // Check publish config
-            const hasConfig = PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.token;
-            const badge = document.getElementById('publishStatus');
-            if (hasConfig) {
-                badge.className = 'status-badge status-on';
-                badge.textContent = '✅ Auto-publish ON';
-            } else {
-                badge.className = 'status-badge status-off';
-                badge.textContent = '⚠️ Auto-publish OFF';
+        // ============= BILLING PARSING =============
+        async function parseBillingFile(file) {
+            const filename = file.name.toLowerCase();
+
+            if (filename.endsWith('.csv')) {
+                const text = await file.text();
+                return parseCSVBilling(text);
+            } else if (filename.endsWith('.xls') || filename.endsWith('.xlsx')) {
+                const buffer = await file.arrayBuffer();
+                return parseExcelBilling(buffer, file.name);
             }
 
-            // Tab switching
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const tabName = tab.dataset.tab;
-                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.getElementById(`${tabName}-tab`).classList.add('active');
-                    if (tabName === 'map' && map) {
-                        setTimeout(() => map.invalidateSize(), 100);
-                    }
-                });
-            });
-
-            // Upload areas
-            setupUploadArea('billingUpload', 'billingFiles', handleBillingFiles);
-            setupUploadArea('zipUpload', 'zipFiles', handleZipFiles);
-
-            // Map controls
-            document.getElementById('labelToggle').addEventListener('click', toggleLabels);
-            document.getElementById('addRange').addEventListener('click', addColorRange);
-            document.getElementById('downloadBtn').addEventListener('click', downloadData);
-            document.getElementById('elseColor').addEventListener('change', (e) => {
-                elseColor = e.target.value;
-                store.set('elseColor', elseColor);
-                updateMap();
-            });
-
-            // Load saved data
-            loadSavedData();
-            
-            // Initialize map
-            initMap();
-            
-            // Render color ranges
-            renderColorRanges();
+            throw new Error('Unsupported file format');
         }
 
-        function setupUploadArea(areaId, inputId, handler) {
-            const area = document.getElementById(areaId);
-            const input = document.getElementById(inputId);
+        function parseCSVBilling(text) {
+            const result = {};
+            const lines = text.split('\n').filter(l => l.trim());
+            
+            if (lines.length < 2) return result;
+            
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+            const zipCol = headers.findIndex(h => h.includes('zip') || h.includes('subgroup'));
+            const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
+            
+            if (zipCol === -1 || amtCol === -1) {
+                throw new Error(`Could not find ZIP and Amount columns. Found: ${headers.join(', ')}`);
+            }
+            
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+                if (cols.length <= Math.max(zipCol, amtCol)) continue;
+                
+                const zipStr = cols[zipCol];
+                const amtStr = cols[amtCol];
+                
+                if (zipStr.toLowerCase().includes('unspecified')) continue;
+                
+                const zipMatch = zipStr.match(/(\d{5})/);
+                if (!zipMatch) continue;
+                const zip = zipMatch[1];
+                
+                const amt = parseFloat(amtStr.replace(/[^0-9.-]/g, ''));
+                if (isNaN(amt)) continue;
+                
+                result[zip] = (result[zip] || 0) + amt;
+            }
+            
+            return result;
+        }
 
-            area.addEventListener('click', () => input.click());
-            area.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                area.classList.add('dragover');
-            });
-            area.addEventListener('dragleave', () => area.classList.remove('dragover'));
-            area.addEventListener('drop', (e) => {
-                e.preventDefault();
-                area.classList.remove('dragover');
-                handler(e.dataTransfer.files);
-            });
-            input.addEventListener('change', (e) => handler(e.target.files));
+        function parseExcelBilling(buffer, filename) {
+            const result = {};
+            
+            try {
+                const workbook = XLSX.read(buffer, { type: 'array' });
+                
+                let sheetName = null;
+                for (const name of workbook.SheetNames) {
+                    const lower = name.toLowerCase();
+                    if (lower.includes('subgroup') && lower.includes('entr')) {
+                        sheetName = name;
+                        break;
+                    }
+                }
+                
+                if (!sheetName) {
+                    sheetName = workbook.SheetNames[0];
+                }
+                
+                const sheet = workbook.Sheets[sheetName];
+                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                
+                if (data.length < 2) return result;
+                
+                const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+                const zipCol = headers.findIndex(h => h.includes('subgroup') || h.includes('zip'));
+                const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
+                
+                if (zipCol === -1 || amtCol === -1) {
+                    throw new Error(`Could not find required columns in ${filename}`);
+                }
+                
+                for (let i = 1; i < data.length; i++) {
+                    const row = data[i];
+                    if (!row || row.length <= Math.max(zipCol, amtCol)) continue;
+                    
+                    const zipVal = String(row[zipCol] || '').trim();
+                    const amtVal = row[amtCol];
+                    
+                    if (zipVal.toLowerCase() === 'unspecified') continue;
+                    
+                    const zipMatch = zipVal.match(/(\d{5})/);
+                    if (!zipMatch) continue;
+                    const zip = zipMatch[1];
+                    
+                    const amt = parseFloat(String(amtVal).replace(/[^0-9.-]/g, ''));
+                    if (isNaN(amt)) continue;
+                    
+                    result[zip] = (result[zip] || 0) + amt;
+                }
+                
+            } catch (err) {
+                throw new Error(`Excel parsing error: ${err.message}`);
+            }
+            
+            return result;
+        }
+
+        // ============= SHAPEFILE PARSING =============
+        async function parseShapeFile(file) {
+            if (file.name.toLowerCase().endsWith('.geojson')) {
+                const text = await file.text();
+                return JSON.parse(text);
+            } else if (file.name.toLowerCase().endsWith('.zip')) {
+                const buffer = await file.arrayBuffer();
+                const geojson = await shp(buffer);
+                
+                if (Array.isArray(geojson)) {
+                    return {
+                        type: 'FeatureCollection',
+                        features: geojson.flatMap(item => 
+                            item.type === 'FeatureCollection' ? item.features : [item]
+                        )
+                    };
+                }
+                
+                return geojson;
+            }
+            
+            throw new Error('Unsupported shape file format');
+        }
+
+        function processZipShapes(features) {
+            const processed = [];
+
+            for (const feature of features) {
+                try {
+                    if (!feature.geometry) continue;
+                    
+                    let clipped;
+                    try {
+                        clipped = turf.bboxClip(feature, HOUSTON_BBOX);
+                    } catch (e) {
+                        clipped = feature;
+                    }
+                    
+                    let simplified;
+                    try {
+                        simplified = turf.simplify(clipped, { tolerance: 0.001, highQuality: false });
+                    } catch (e) {
+                        simplified = clipped;
+                    }
+                    
+                    const props = feature.properties || {};
+                    const zipCode = props.ZCTA5CE10 || 
+                                   props.ZCTA5CE20 || 
+                                   props.ZCTA5 ||
+                                   props.ZIP || 
+                                   props.ZIPCODE ||
+                                   props.zip ||
+                                   props.GEOID10 ||
+                                   props.GEOID;
+                    
+                    if (zipCode) {
+                        simplified.properties = { ZIP: String(zipCode).padStart(5, '0') };
+                        processed.push(simplified);
+                    }
+                } catch (err) {
+                    console.warn('Error processing feature:', err);
+                }
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: processed
+            };
         }
 
         // ============= FILE HANDLING =============
@@ -677,179 +783,100 @@
             }
         }
 
-        // ============= BILLING PARSING (Based on your Colab) =============
-        async function parseBillingFile(file) {
-            const result = {};
-            const filename = file.name.toLowerCase();
+        // ============= MAP =============
+        function initMap() {
+            map = L.map('map').setView([29.76, -95.37], 10);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
 
-            if (filename.endsWith('.csv')) {
-                const text = await file.text();
-                return parseCSVBilling(text);
-            } else if (filename.endsWith('.xls') || filename.endsWith('.xlsx')) {
-                const buffer = await file.arrayBuffer();
-                return parseExcelBilling(buffer, file.name);
-            }
-
-            throw new Error('Unsupported file format');
+            updateMap();
         }
 
-        function parseCSVBilling(text) {
-            const result = {};
-            const lines = text.split('\n').filter(l => l.trim());
-            
-            if (lines.length < 2) return result;
-            
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-            const zipCol = headers.findIndex(h => h.includes('zip') || h.includes('subgroup'));
-            const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
-            
-            if (zipCol === -1 || amtCol === -1) {
-                throw new Error(`Could not find ZIP and Amount columns. Found: ${headers.join(', ')}`);
-            }
-            
-            for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
-                if (cols.length <= Math.max(zipCol, amtCol)) continue;
-                
-                const zipStr = cols[zipCol];
-                const amtStr = cols[amtCol];
-                
-                // Extract ZIP (first 5 digits)
-                const zipMatch = zipStr.match(/(\d{5})/);
-                if (!zipMatch) continue;
-                const zip = zipMatch[1];
-                
-                // Skip "Unspecified"
-                if (zipStr.toLowerCase().includes('unspecified')) continue;
-                
-                // Parse amount
-                const amt = parseFloat(amtStr.replace(/[^0-9.-]/g, ''));
-                if (isNaN(amt)) continue;
-                
-                result[zip] = (result[zip] || 0) + amt;
-            }
-            
-            return result;
-        }
+        function updateMap() {
+            if (!map) return;
 
-        function parseExcelBilling(buffer, filename) {
-            const result = {};
-            
-            try {
-                const workbook = XLSX.read(buffer, { type: 'array' });
-                
-                // Look for "Subgroup Entries" sheet
-                let sheetName = null;
-                for (const name of workbook.SheetNames) {
-                    const lower = name.toLowerCase();
-                    if (lower.includes('subgroup') && lower.includes('entr')) {
-                        sheetName = name;
-                        break;
-                    }
-                }
-                
-                if (!sheetName) {
-                    sheetName = workbook.SheetNames[0];
-                }
-                
-                const sheet = workbook.Sheets[sheetName];
-                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                
-                if (data.length < 2) return result;
-                
-                // Find columns
-                const headers = data[0].map(h => String(h || '').trim().toLowerCase());
-                const zipCol = headers.findIndex(h => h.includes('subgroup') || h.includes('zip'));
-                const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
-                
-                if (zipCol === -1 || amtCol === -1) {
-                    throw new Error(`Could not find required columns in ${filename}`);
-                }
-                
-                // Process rows
-                for (let i = 1; i < data.length; i++) {
-                    const row = data[i];
-                    if (!row || row.length <= Math.max(zipCol, amtCol)) continue;
-                    
-                    const zipVal = String(row[zipCol] || '').trim();
-                    const amtVal = row[amtCol];
-                    
-                    // Skip unspecified
-                    if (zipVal.toLowerCase() === 'unspecified') continue;
-                    
-                    // Extract 5-digit ZIP
-                    const zipMatch = zipVal.match(/(\d{5})/);
-                    if (!zipMatch) continue;
-                    const zip = zipMatch[1];
-                    
-                    // Parse amount
-                    const amt = parseFloat(String(amtVal).replace(/[^0-9.-]/g, ''));
-                    if (isNaN(amt)) continue;
-                    
-                    result[zip] = (result[zip] || 0) + amt;
-                }
-                
-            } catch (err) {
-                throw new Error(`Excel parsing error: ${err.message}`);
+            if (geoJsonLayer) {
+                map.removeLayer(geoJsonLayer);
             }
-            
-            return result;
-        }
+            if (labelLayer) {
+                map.removeLayer(labelLayer);
+            }
 
-        // ============= SHAPEFILE PARSING =============
-        async function parseShapeFile(file) {
-            if (file.name.toLowerCase().endsWith('.geojson')) {
-                const text = await file.text();
-                return JSON.parse(text);
-            } else if (file.name.toLowerCase().endsWith('.zip')) {
-                const buffer = await file.arrayBuffer();
-                const geojson = await shp(buffer);
-                
-                // shpjs can return array or FeatureCollection
-                if (Array.isArray(geojson)) {
+            if (!zipShapes) return;
+
+            geoJsonLayer = L.geoJSON(zipShapes, {
+                style: (feature) => {
+                    const zip = feature.properties.ZIP;
+                    const revenue = billingData[zip] || 0;
+                    const color = getColorForRevenue(revenue);
+                    
                     return {
-                        type: 'FeatureCollection',
-                        features: geojson.flatMap(item => 
-                            item.type === 'FeatureCollection' ? item.features : [item]
-                        )
+                        fillColor: color,
+                        fillOpacity: 0.7,
+                        color: '#1e293b',
+                        weight: 1
                     };
+                },
+                onEachFeature: (feature, layer) => {
+                    const zip = feature.properties.ZIP;
+                    const revenue = billingData[zip] || 0;
+                    layer.bindPopup(`
+                        <strong>ZIP:</strong> ${zip}<br>
+                        <strong>Revenue:</strong> $${revenue.toLocaleString()}
+                    `);
                 }
-                
-                return geojson;
+            }).addTo(map);
+
+            map.fitBounds(geoJsonLayer.getBounds());
+
+            if (labelsVisible) {
+                showLabels();
             }
-            
-            throw new Error('Unsupported shape file format');
         }
 
-        function processZipShapes(features) {
-            const processed = [];
-            const bbox = turf.bbox(turf.bboxPolygon(HOUSTON_BBOX));
+        function getColorForRevenue(revenue) {
+            for (const range of colorRanges) {
+                if (revenue >= range.min && revenue < range.max) {
+                    return range.color;
+                }
+            }
+            return elseColor;
+        }
 
-            for (const feature of features) {
+        function toggleLabels() {
+            labelsVisible = !labelsVisible;
+            const toggle = document.getElementById('labelToggle');
+            toggle.classList.toggle('active', labelsVisible);
+            
+            if (labelsVisible) {
+                showLabels();
+            } else {
+                if (labelLayer) {
+                    map.removeLayer(labelLayer);
+                    labelLayer = null;
+                }
+            }
+        }
+
+        function showLabels() {
+            if (labelLayer) {
+                map.removeLayer(labelLayer);
+            }
+            if (!zipShapes) return;
+
+            const markers = [];
+            for (const feature of zipShapes.features) {
                 try {
-                    // Skip if no geometry
-                    if (!feature.geometry) continue;
+                    const centroid = turf.centroid(feature);
+                    const coords = centroid.geometry.coordinates;
+                    const zip = feature.properties.ZIP;
                     
-                    // Clip to Houston bbox
-                    let clipped;
-                    try {
-                        clipped = turf.bboxClip(feature, bbox);
-                    } catch (e) {
-                        clipped = feature;
-                    }
-                    
-                    // Simplify geometry
-                    let simplified;
-                    try {
-                        simplified = turf.simplify(clipped, { tolerance: 0.001, highQuality: false });
-                    } catch (e) {
-                        simplified = clipped;
-                    }
-                    
-                    // Extract ZIP code from various possible property names
-                    const props = feature.properties || {};
-                    const zipCode = props.ZCTA5CE10 || 
-                                   props.ZCTA5CE20 || 
-                                   props.ZCTA5 ||
-                                   props.ZIP || 
-                                   props.ZIPCODE ||
+                    const marker = L.marker([coords[1], coords[0]], {
+                        icon: L.divIcon({
+                            className: 'zip-label',
+                            html: `<div style="background: rgba(255,255,255,0.8); padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; color: #000;">${zip}</div>`,
+                            iconSize: [50, 20]
+                        })
+                    });
