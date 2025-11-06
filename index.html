@@ -11,44 +11,51 @@
     body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.6; }
     .app-container { max-width: 1600px; margin: 0 auto; padding: 20px; }
 
-    /* Header: light so black title is readable */
-    header { background: #f8fafc; color:#000; padding: 30px; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-    h1 { font-size: 2.2em; font-weight: 800; margin-bottom: 6px; color:#000; }
+    /* Header switched to light for black title readability */
+    header { background: #f8fafc; color:#000; padding: 28px; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+    h1 { font-size: 2.25em; font-weight: 800; margin-bottom: 6px; color:#000; }
     .subtitle { color: #111827; font-size: 1.05em; }
-    .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 0.85em; font-weight: 600; margin-top: 12px; }
+    .status-badge { display: inline-block; padding: 6px 12px; border-radius: 18px; font-size: 0.85em; font-weight: 700; margin-top: 10px; }
     .status-on { background: rgba(16,185,129,0.15); color: #065f46; border: 1px solid #10b981; }
 
     .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--bg-secondary); padding: 8px; border-radius: 12px; }
-    .tab { flex: 1; padding: 14px 24px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-radius: 8px; font-size: 1em; font-weight: 700; transition: all .2s; }
+    .tab { flex: 1; padding: 12px 18px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-radius: 8px; font-size: 1em; font-weight: 800; transition: all .2s; }
     .tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
     .tab.active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(59,130,246,.3); }
-    .tab-content { display: none; background: var(--bg-secondary); border-radius: 16px; padding: 24px 24px 10px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+    .tab-content { display: none; background: var(--bg-secondary); border-radius: 16px; padding: 22px 22px 12px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
     .tab-content.active { display: block; animation: fadeIn .2s ease; }
     @keyframes fadeIn { from { opacity:0; transform: translateY(6px);} to { opacity:1; transform: none; } }
 
-    .upload-section { margin-bottom: 20px; }
-    .section-title { font-size: 1.2em; font-weight: 800; margin-bottom: 10px; color: var(--text-primary); }
-    .upload-area { background: var(--bg-tertiary); border: 2px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; transition: all .2s; cursor: pointer; }
+    .upload-section { margin-bottom: 18px; }
+    .section-title { font-size: 1.15em; font-weight: 800; margin-bottom: 10px; color: var(--text-primary); }
+    .upload-area { background: var(--bg-tertiary); border: 2px dashed var(--border); border-radius: 12px; padding: 26px; text-align: center; transition: all .2s; cursor: pointer; }
     .upload-area:hover { border-color: var(--accent); background: rgba(59,130,246,.05); }
     .upload-area.dragover { border-color: var(--accent); background: rgba(59,130,246,.1); }
-    .upload-icon { font-size: 3em; margin-bottom: 12px; opacity: .6; }
+    .upload-icon { font-size: 2.2em; margin-bottom: 10px; opacity: .6; }
     input[type=file] { display:none; }
 
-    .btn { padding: 10px 18px; border:none; border-radius:8px; font-size:0.95em; font-weight:800; cursor:pointer; transition: all .15s; margin:4px; }
+    .btn { padding: 9px 16px; border:none; border-radius:8px; font-size:0.95em; font-weight:800; cursor:pointer; transition: all .15s; margin:4px; }
     .btn-primary { background: var(--accent); color:#fff; }
     .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,130,246,.4); }
     .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
     .btn-secondary:hover { background: var(--border); }
 
     #map { height: 64vh; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
-    .map-controls { margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .map-controls { margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .toggle-label { display:flex; align-items:center; gap:8px; color:var(--text-secondary); cursor:pointer; }
-    .toggle-switch { position: relative; width:48px; height:24px; background: var(--bg-tertiary); border-radius:12px; transition: background .2s; cursor:pointer; }
+    .toggle-switch { position: relative; width:44px; height:22px; background: var(--bg-tertiary); border-radius:11px; transition: background .15s; cursor:pointer; }
     .toggle-switch.active { background: var(--accent); }
-    .toggle-switch::after { content:""; position:absolute; width:18px; height:18px; background:#fff; border-radius:50%; top:3px; left:3px; transition: transform .2s; }
-    .toggle-switch.active::after { transform: translateX(24px); }
+    .toggle-switch::after { content:""; position:absolute; width:16px; height:16px; background:#fff; border-radius:50%; top:3px; left:3px; transition: transform .15s; }
+    .toggle-switch.active::after { transform: translateX(22px); }
 
-    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+    .color-ranges { background: var(--bg-tertiary); padding:16px; border-radius:12px; margin-bottom: 12px; }
+    .range-row { display:grid; grid-template-columns: 1fr 1fr 100px 40px; gap:10px; margin-bottom:10px; align-items:center; }
+    .range-input { background: var(--bg-primary); border:1px solid var(--border); color:var(--text-primary); padding:8px; border-radius:6px; font-size:.95em; }
+    .range-input:focus { outline:none; border-color: var(--accent); }
+    .color-input { width:100%; height:36px; border:none; border-radius:6px; cursor:pointer; }
+    .delete-btn { background: var(--error); color:#fff; border:none; width:36px; height:36px; border-radius:6px; cursor:pointer; font-size:1.05em; }
+
+    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:12px; }
     .stat-card { background: var(--bg-tertiary); padding:16px; border-radius:12px; border-left:4px solid var(--accent); }
     .stat-label { color: var(--text-muted); font-size:.85em; margin-bottom:6px; }
     .stat-value { font-size:1.6em; font-weight:800; color: var(--text-primary); }
@@ -57,7 +64,7 @@
     .year-btn { padding:6px 10px; border:1px solid #334155; background:#0b1222; color:#e2e8f0; border-radius:8px; cursor:pointer; }
     .year-btn.active { background: var(--accent); color:#0b0f19; border-color: transparent; }
 
-    /* Table: sticky header + left zip column, color-coded cells */
+    /* Table */
     .table-wrap { max-height: 60vh; overflow: auto; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--border); }
     table { width:100%; border-collapse: separate; border-spacing: 0; }
     thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-tertiary); }
@@ -75,7 +82,7 @@
     <header>
       <h1>Houston ZIP Revenue Heatmap</h1>
       <p class="subtitle">Client-side revenue visualization with auto-publish to GitHub</p>
-      <span class="status-badge status-on" id="publishStatus">Auto-publish ON</span>
+      <span class="status-badge status-on" id="publishStatus">Auto‑publish ON</span>
     </header>
 
     <div class="tabs">
@@ -137,7 +144,7 @@
         <div id="yearButtons" style="display:flex; gap:6px;"></div>
         <button class="btn btn-secondary" id="fitHouston">Fit Houston</button>
       </div>
-      <!-- Color editor removed from Map tab per request -->
+      <!-- Color editor intentionally removed from Map tab (kept in Menu) -->
       <div id="map"></div>
     </div>
 
@@ -147,12 +154,7 @@
         <button class="btn btn-primary" id="downloadBtn">⬇️ Download billing.json</button>
       </div>
       <div class="table-wrap">
-        <table id="dataTable">
-          <thead id="pivotHead"></thead>
-          <tbody id="pivotBody">
-            <tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr>
-          </tbody>
-        </table>
+        <table id="dataTable"><thead id="pivotHead"></thead><tbody id="pivotBody"><tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr></tbody></table>
       </div>
     </div>
   </div>
@@ -173,15 +175,15 @@
     };
     const HOUSTON_BBOX = [-96.3, 28.8, -94.9, 30.3];
 
-    // “Py-style” ranges/colors you asked for
+    // Color breaks matching your Python logic
     const DEFAULT_RANGES = [
       { min: 0,     max: 2000,  color: 'transparent' },
-      { min: 2001,  max: 5000,  color: '#FF0000' },   // red
-      { min: 5001,  max: 15000, color: '#FFC0CB' },   // pink
-      { min: 15001, max: 30000, color: '#FFFF00' },   // yellow
-      { min: 30001, max: 50000, color: '#90EE90' },   // light green
-      { min: 50001, max: 80000, color: '#228B22' },   // forest green
-      { min: 80001, max: Infinity, color: '#1E90FF' } // blue
+      { min: 2001,  max: 5000,  color: '#FF0000' },
+      { min: 5001,  max: 15000, color: '#FFC0CB' },
+      { min: 15001, max: 30000, color: '#FFFF00' },
+      { min: 30001, max: 50000, color: '#90EE90' },
+      { min: 50001, max: 80000, color: '#228B22' },
+      { min: 80001, max: Infinity, color: '#1E90FF' }
     ];
 
     // ===== STATE =====
@@ -213,7 +215,7 @@
 
     // ===== HELPERS =====
     const fmtUSD = (n)=> `$${Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0})}`;
-    function detectYearFromName(name){ const m = name.match(/20\\d{2}/); return m? m[0] : null; }
+    function detectYearFromName(name){ const m = name.match(/20\d{2}/); return m? m[0] : null; }
     function pickColor(v){ for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; } return elseColor; }
     function textColorFor(bg){
       if(!bg || bg==='transparent') return '#e2e8f0';
@@ -223,28 +225,19 @@
       return yiq > 150 ? '#111827' : '#ffffff';
     }
 
-    // ===== PUBLISH (always attempt on every update) =====
-    function setPublishBadges(){
-      const el=document.getElementById('publishStatus');
-      if(el){ el.className='status-badge status-on'; el.textContent='Auto-publish ON'; }
-    }
+    // ===== AUTO PUBLISH =====
+    function setPublishBadges(){ const el=document.getElementById('publishStatus'); if(el){ el.className='status-badge status-on'; el.textContent='Auto‑publish ON'; } }
     async function autoPublish(path, content){
       setPublishBadges();
       try{
         const apiBase=`https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/`;
-        let sha=null;
-        const head=await fetch(apiBase+path+`?ref=${PUBLISH_CFG.branch}`);
+        let sha=null; const head=await fetch(apiBase+path+`?ref=${PUBLISH_CFG.branch}`);
         if(head.ok){ const j=await head.json(); sha=j.sha; }
         const body = typeof content==='string'? content : JSON.stringify(content);
         const res=await fetch(apiBase+path,{
           method:'PUT',
           headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}`,'Content-Type':'application/json' },
-          body: JSON.stringify({
-            message:`auto: update ${path} ${new Date().toISOString()}`,
-            content: btoa(unescape(encodeURIComponent(body))),
-            branch: PUBLISH_CFG.branch,
-            sha
-          })
+          body: JSON.stringify({ message:`auto: update ${path} ${new Date().toISOString()}`, content: btoa(unescape(encodeURIComponent(body))), branch: PUBLISH_CFG.branch, sha })
         });
         if(!res.ok){ const t=await res.text(); throw new Error(`${res.status}: ${t}`); }
         log(`Published ${path}`,'success');
@@ -271,7 +264,7 @@
     }
     function parseCSVBilling(text, filename){
       const res={year: detectYearFromName(filename)||'Unknown', data:{}};
-      const lines=text.split(/\\r?\\n/).filter(Boolean);
+      const lines=text.split(/\r?\n/).filter(Boolean);
       if(lines.length<2) return res;
       const headers=splitCSV(lines[0]).map(h=>h.toLowerCase());
       const zipCol=headers.findIndex(h=>h.includes('zip')||h.includes('subgroup'));
@@ -282,7 +275,7 @@
         const zipStr=(cols[zipCol]||'').toString();
         const amtStr=(cols[amtCol]||'').toString();
         if(zipStr.toLowerCase().includes('unspecified')) continue;
-        const m=zipStr.match(/(\\d{5})/); if(!m) continue;
+        const m=zipStr.match(/(\d{5})/); if(!m) continue;
         const zip=m[1];
         const amt=parseFloat(amtStr.replace(/[^0-9.-]/g,''));
         if(!isNaN(amt)) res.data[zip]=(res.data[zip]||0)+amt;
@@ -312,7 +305,7 @@
         const zipStr=String(row[zipCol]||'');
         const amtVal=row[amtCol];
         if(zipStr.toLowerCase()==='unspecified') continue;
-        const m=zipStr.match(/(\\d{5})/); if(!m) continue;
+        const m=zipStr.match(/(\d{5})/); if(!m) continue;
         const zip=m[1];
         const amt=parseFloat(String(amtVal).replace(/[^0-9.-]/g,''));
         if(!isNaN(amt)) out.data[zip]=(out.data[zip]||0)+amt;
@@ -337,10 +330,8 @@
       for(const f of features){
         try{
           if(!f.geometry) continue;
-          let clipped;
-          try{ clipped=turf.bboxClip(f, HOUSTON_BBOX);}catch{clipped=f;}
-          let simple;
-          try{ simple=turf.simplify(clipped,{tolerance:0.0012, highQuality:false}); }catch{ simple=clipped; }
+          let clipped; try{ clipped=turf.bboxClip(f, HOUSTON_BBOX);}catch{clipped=f;}
+          let simple; try{ simple=turf.simplify(clipped,{tolerance:0.0012, highQuality:false}); }catch{ simple=clipped; }
           const p=f.properties||{};
           const zip = p.ZCTA5CE10||p.ZCTA5CE20||p.ZCTA5||p.ZIP||p.ZIPCODE||p.zip||p.GEOID10||p.GEOID;
           if(zip){ simple.properties={ ZIP: String(zip).padStart(5,'0') }; out.push(simple); }
@@ -358,22 +349,16 @@
       return (billingByYear[selectedYear]?.[zip])||0;
     }
 
-    // ===== MAP (optimized) =====
+    // ===== MAP (snappy restyle instead of rebuild) =====
     function initMap(){
       map = L.map('map', { preferCanvas:true }).setView([29.76,-95.37], 10);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'© OpenStreetMap contributors' }).addTo(map);
-
       geoJsonLayer = L.geoJSON(null, { style: styleForFeature, onEachFeature: bindPopup }).addTo(map);
-      if(zipShapes){
-        geoJsonLayer.addData(zipShapes);
-        try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[16,16]}); }catch{}
-      }
+      if(zipShapes){ geoJsonLayer.addData(zipShapes); try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[16,16]}); }catch{} }
       if(labelsVisible) showLabels();
     }
     function styleForFeature(feature){
-      const z=feature.properties.ZIP;
-      const v=currentRevenueFor(z);
-      const col=pickColor(v);
+      const z=feature.properties.ZIP; const v=currentRevenueFor(z); const col=pickColor(v);
       return { fillColor: col, fillOpacity: col==='transparent'? 0.06 : 0.85, color:'#1e293b', weight: 0.6 };
     }
     function bindPopup(f, layer){
@@ -384,14 +369,8 @@
     }
     function refreshStyles(){
       if(!geoJsonLayer) return;
-      geoJsonLayer.setStyle(styleForFeature); // fast restyle
-      geoJsonLayer.eachLayer(l=>{
-        const f=l.feature; if(!f) return;
-        const z=f.properties.ZIP;
-        const details = Object.keys(billingByYear).map(y=>`<div>${y}: <b>${fmtUSD(billingByYear[y][z]||0)}</b></div>`).join('');
-        const total = fmtUSD(currentRevenueFor(z));
-        l.setPopupContent(`<strong>ZIP:</strong> ${z}<br><strong>Total:</strong> ${total}<hr>${details}`);
-      });
+      geoJsonLayer.setStyle(styleForFeature);
+      geoJsonLayer.eachLayer(l=>{ const f=l.feature; if(!f) return; const z=f.properties.ZIP; const details = Object.keys(billingByYear).map(y=>`<div>${y}: <b>${fmtUSD(billingByYear[y][z]||0)}</b></div>`).join(''); const total = fmtUSD(currentRevenueFor(z)); l.setPopupContent(`<strong>ZIP:</strong> ${z}<br><strong>Total:</strong> ${total}<hr>${details}`); });
     }
     function showLabels(){
       if(labelLayer) { map.removeLayer(labelLayer); labelLayer=null; }
@@ -401,28 +380,21 @@
         try{
           const c=turf.centroid(f).geometry.coordinates;
           const zip=f.properties.ZIP;
-          const icon=L.divIcon({
-            className:'zip-label',
-            html:`<div style="font-size:11px;font-weight:700;-webkit-text-stroke:2px white;color:black; mix-blend-mode:multiply">${zip}</div>`
-          });
-          L.marker([c[1],c[0]],{icon}).addTo(labelLayer);
+          const icon=L.divIcon({ className:'zip-label', html:`<div style="font-size:11px;font-weight:800;background:rgba(255,255,255,0.9);color:#000;border:1px solid #111827;border-radius:3px;padding:1px 4px;">${zip}</div>` });
+          L.marker([c[1],c[0]],{icon, interactive:false}).addTo(labelLayer);
         }catch{}
       }
       labelLayer.addTo(map);
     }
 
-    // ===== TABLE (color-coded cells) =====
+    // ===== TABLE (color-coded cells matching map) =====
     function renderPivot(){
       const head=document.getElementById('pivotHead');
       const body=document.getElementById('pivotBody');
       const yrList = ['ZIP', ...Array.from(years).sort()];
-      if(yrList.length===1){
-        head.innerHTML=''; body.innerHTML='<tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr>'; return;
-      }
+      if(yrList.length===1){ head.innerHTML=''; body.innerHTML='<tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr>'; return; }
       head.innerHTML = `<tr>${yrList.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-      const zipSet=new Set();
-      for(const y of Object.keys(billingByYear)) for(const z of Object.keys(billingByYear[y])) zipSet.add(z);
-
+      const zipSet=new Set(); for(const y of Object.keys(billingByYear)) for(const z of Object.keys(billingByYear[y])) zipSet.add(z);
       const rows=[...zipSet].sort().map(zip=>{
         const cells=[`<td style="position:sticky; left:0; background: var(--bg-tertiary); z-index:1;">${zip}</td>`];
         for(const y of yrList.slice(1)){
@@ -461,11 +433,8 @@
       log(`Processing ${files.length} shape file(s)…`);
       let feats=[];
       for(const f of files){
-        try{
-          const gj=await parseShapeFile(f);
-          feats = feats.concat((gj.features)||[]);
-          log(`✓ ${f.name}: ${(gj.features||[]).length} features`, 'success');
-        }catch(err){ log(`✗ ${f.name}: ${err.message}`, 'error'); }
+        try{ const gj=await parseShapeFile(f); feats = feats.concat((gj.features)||[]); log(`✓ ${f.name}: ${(gj.features||[]).length} features`, 'success'); }
+        catch(err){ log(`✗ ${f.name}: ${err.message}`, 'error'); }
       }
       if(feats.length){
         zipShapes = processZipShapes(feats);
@@ -478,7 +447,7 @@
       }
     }
 
-    // ===== YEAR TOGGLES (snappy: restyle only) =====
+    // ===== YEAR TOGGLES (snappy; no rebuild) =====
     function updateYearButtons(){
       const cont=document.getElementById('yearButtons');
       const ys = Array.from(years).sort();
@@ -487,17 +456,10 @@
         const b=document.createElement('button');
         b.className='year-btn'+(selectedYear===y?' active':'');
         b.textContent=lbl;
-        b.onclick=()=>{
-          if(selectedYear===y) return;
-          selectedYear=y;
-          Array.from(cont.children).forEach(btn=>btn.classList.remove('active'));
-          b.classList.add('active');
-          refreshStyles(); // no refit, instant
-        };
+        b.onclick=()=>{ if(selectedYear===y) return; selectedYear=y; Array.from(cont.children).forEach(btn=>btn.classList.remove('active')); b.classList.add('active'); refreshStyles(); };
         cont.appendChild(b);
       };
-      mk('ALL','All');
-      ys.forEach(y=>mk(y,String(y)));
+      mk('ALL','All'); ys.forEach(y=>mk(y,String(y)));
     }
 
     // ===== STATS =====
@@ -528,31 +490,20 @@
       labelsVisible=!labelsVisible;
       document.getElementById('labelToggle').classList.toggle('active', labelsVisible);
       if(!map) return;
-      if(labelsVisible) showLabels();
-      else if(labelLayer){ map.removeLayer(labelLayer); labelLayer=null; }
+      if(labelsVisible) showLabels(); else if(labelLayer){ map.removeLayer(labelLayer); labelLayer=null; }
     });
 
     document.getElementById('fitHouston').addEventListener('click', ()=>{
-      if(map && geoJsonLayer){
-        try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[16,16]}); }catch{}
-      }
+      if(map && geoJsonLayer){ try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[16,16]}); }catch{} }
     });
 
-    document.getElementById('addRangeA').addEventListener('click', ()=>{
-      ranges.push({min:0,max:Infinity,color:'#cccccc'});
-      renderRangesUpload(); saveRanges(); refreshStyles(); renderPivot();
-    });
-    document.getElementById('elseColorA').addEventListener('change', (e)=>{
-      elseColor=e.target.value; saveRanges(); refreshStyles(); renderPivot();
-    });
-    document.getElementById('saveRangesA').addEventListener('click', ()=>{
-      saveRanges(); refreshStyles(); renderPivot();
-    });
+    document.getElementById('addRangeA').addEventListener('click', ()=>{ ranges.push({min:0,max:Infinity,color:'#cccccc'}); renderRangesUpload(); saveRanges(); refreshStyles(); renderPivot(); });
+    document.getElementById('elseColorA').addEventListener('change', (e)=>{ elseColor=e.target.value; saveRanges(); refreshStyles(); renderPivot(); });
+    document.getElementById('saveRangesA').addEventListener('click', ()=>{ saveRanges(); refreshStyles(); renderPivot(); });
 
     document.getElementById('downloadBtn').addEventListener('click', ()=>{
       const blob=new Blob([JSON.stringify({years:billingByYear},null,2)],{type:'application/json'});
-      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='billing.json'; a.click();
-      URL.revokeObjectURL(a.href);
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='billing.json'; a.click(); URL.revokeObjectURL(a.href);
     });
 
     function setupUploader(boxId, inputId, handler){
@@ -596,7 +547,6 @@
 
     // ===== INIT =====
     (async function init(){
-      setPublishBadges();
       const savedByYear=await store.get('billingByYear');
       const savedYears=await store.get('years');
       const savedShapes=await store.get('zipShapes');
