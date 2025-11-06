@@ -1,882 +1,574 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Houston ZIP Revenue Heatmap</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
-    
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Houston ZIP Revenue Heatmap</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg-primary:#0f172a; --bg-secondary:#1e293b; --bg-tertiary:#334155; --text-primary:#f1f5f9; --text-secondary:#cbd5e1; --text-muted:#94a3b8; --accent:#3b82f6; --accent-hover:#2563eb; --success:#10b981; --warning:#f59e0b; --error:#ef4444; --border:#475569; }
+    body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.6; }
+    .app-container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+    header { background: linear-gradient(135deg,#1e293b 0%,#334155 100%); padding: 30px; border-radius: 16px; margin-bottom: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    h1 { font-size: 2.5em; font-weight: 700; margin-bottom: 8px; background: linear-gradient(135deg,#3b82f6,#8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .subtitle { color: var(--text-secondary); font-size: 1.1em; }
+    .status-badge { display: inline-block; padding: 8px 16px; border-radius: 20px; font-size: 0.85em; font-weight: 600; margin-top: 12px; }
+    .status-on { background: rgba(16,185,129,0.2); color: var(--success); border: 1px solid var(--success); }
+    .status-off { background: rgba(245,158,11,0.2); color: var(--warning); border: 1px solid var(--warning); }
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; background: var(--bg-secondary); padding: 8px; border-radius: 12px; }
+    .tab { flex: 1; padding: 14px 24px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-radius: 8px; font-size: 1em; font-weight: 600; transition: all .3s; }
+    .tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .tab.active { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(59,130,246,.3); }
+    .tab-content { display: none; background: var(--bg-secondary); border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+    .tab-content.active { display: block; animation: fadeIn .3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform: translateY(10px);} to { opacity:1; transform: none; } }
 
-        :root {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --text-primary: #f1f5f9;
-            --text-secondary: #cbd5e1;
-            --text-muted: #94a3b8;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --error: #ef4444;
-            --border: #475569;
-        }
+    .upload-section { margin-bottom: 32px; }
+    .section-title { font-size: 1.4em; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); }
+    .upload-area { background: var(--bg-tertiary); border: 2px dashed var(--border); border-radius: 12px; padding: 32px; text-align: center; transition: all .3s; cursor: pointer; }
+    .upload-area:hover { border-color: var(--accent); background: rgba(59,130,246,.05); }
+    .upload-area.dragover { border-color: var(--accent); background: rgba(59,130,246,.1); }
+    .upload-icon { font-size: 3em; margin-bottom: 16px; opacity: .6; }
+    input[type=file] { display:none; }
+    .btn { padding: 12px 24px; border:none; border-radius:8px; font-size:1em; font-weight:600; cursor:pointer; transition: all .2s; margin:4px; }
+    .btn-primary { background: var(--accent); color:#fff; }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59,130,246,.4); }
+    .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); }
+    .btn-secondary:hover { background: var(--border); }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
-        }
+    #map { height: 64vh; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+    .map-controls { margin-bottom: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .toggle-label { display:flex; align-items:center; gap:8px; color:var(--text-secondary); cursor:pointer; }
+    .toggle-switch { position: relative; width:48px; height:24px; background: var(--bg-tertiary); border-radius:12px; transition: background .3s; cursor:pointer; }
+    .toggle-switch.active { background: var(--accent); }
+    .toggle-switch::after { content:""; position:absolute; width:18px; height:18px; background:#fff; border-radius:50%; top:3px; left:3px; transition: transform .3s; }
+    .toggle-switch.active::after { transform: translateX(24px); }
 
-        .app-container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+    .color-ranges { background: var(--bg-tertiary); padding:24px; border-radius:12px; margin-bottom: 20px; }
+    .range-row { display:grid; grid-template-columns: 1fr 1fr 100px 40px; gap:12px; margin-bottom:12px; align-items:center; }
+    .range-input { background: var(--bg-primary); border:1px solid var(--border); color:var(--text-primary); padding:10px; border-radius:6px; font-size:.95em; }
+    .range-input:focus { outline:none; border-color: var(--accent); }
+    .color-input { width:100%; height:40px; border:none; border-radius:6px; cursor:pointer; }
+    .delete-btn { background: var(--error); color:#fff; border:none; width:40px; height:40px; border-radius:6px; cursor:pointer; font-size:1.1em; }
 
-        header {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            padding: 30px;
-            border-radius: 16px;
-            margin-bottom: 24px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-        }
+    table { width:100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 14px; text-align:left; border-bottom:1px solid var(--border); }
+    th { background: var(--bg-tertiary); font-weight:600; color: var(--text-primary); position: sticky; top: 0; }
+    tr:hover { background: rgba(59,130,246,.05); }
 
-        h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            margin-bottom: 8px;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
+    .status-log { background: var(--bg-tertiary); padding:20px; border-radius:12px; max-height:300px; overflow-y:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.9em; }
+    .log-entry { margin-bottom:8px; color: var(--text-secondary); }
+    .log-success { color: var(--success); }
+    .log-error { color: var(--error); }
 
-        .subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1em;
-        }
+    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr)); gap:16px; margin-bottom:24px; }
+    .stat-card { background: var(--bg-tertiary); padding:20px; border-radius:12px; border-left:4px solid var(--accent); }
+    .stat-label { color: var(--text-muted); font-size:.85em; margin-bottom:8px; }
+    .stat-value { font-size:1.8em; font-weight:700; color: var(--text-primary); }
+    .leaflet-popup-content-wrapper { background: var(--bg-secondary); color: var(--text-primary); }
+    .leaflet-popup-tip { background: var(--bg-secondary); }
 
-        .status-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-            margin-top: 12px;
-        }
-
-        .status-on {
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
-            border: 1px solid var(--success);
-        }
-
-        .status-off {
-            background: rgba(245, 158, 11, 0.2);
-            color: var(--warning);
-            border: 1px solid var(--warning);
-        }
-
-        .tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 24px;
-            background: var(--bg-secondary);
-            padding: 8px;
-            border-radius: 12px;
-        }
-
-        .tab {
-            flex: 1;
-            padding: 14px 24px;
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-
-        .tab:hover {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-
-        .tab.active {
-            background: var(--accent);
-            color: white;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-        }
-
-        .tab-content {
-            display: none;
-            background: var(--bg-secondary);
-            border-radius: 16px;
-            padding: 32px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .upload-section {
-            margin-bottom: 32px;
-        }
-
-        .section-title {
-            font-size: 1.4em;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: var(--text-primary);
-        }
-
-        .upload-area {
-            background: var(--bg-tertiary);
-            border: 2px dashed var(--border);
-            border-radius: 12px;
-            padding: 32px;
-            text-align: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-
-        .upload-area:hover {
-            border-color: var(--accent);
-            background: rgba(59, 130, 246, 0.05);
-        }
-
-        .upload-area.dragover {
-            border-color: var(--accent);
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-        .upload-icon {
-            font-size: 3em;
-            margin-bottom: 16px;
-            opacity: 0.6;
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 4px;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
-        }
-
-        .btn-secondary {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-
-        .btn-secondary:hover {
-            background: var(--border);
-        }
-
-        #map {
-            height: 600px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-        }
-
-        .map-controls {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .toggle-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text-secondary);
-            cursor: pointer;
-        }
-
-        .toggle-switch {
-            position: relative;
-            width: 48px;
-            height: 24px;
-            background: var(--bg-tertiary);
-            border-radius: 12px;
-            transition: background 0.3s;
-            cursor: pointer;
-        }
-
-        .toggle-switch.active {
-            background: var(--accent);
-        }
-
-        .toggle-switch::after {
-            content: '';
-            position: absolute;
-            width: 18px;
-            height: 18px;
-            background: white;
-            border-radius: 50%;
-            top: 3px;
-            left: 3px;
-            transition: transform 0.3s;
-        }
-
-        .toggle-switch.active::after {
-            transform: translateX(24px);
-        }
-
-        .color-ranges {
-            background: var(--bg-tertiary);
-            padding: 24px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .range-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 100px 40px;
-            gap: 12px;
-            margin-bottom: 12px;
-            align-items: center;
-        }
-
-        .range-input {
-            background: var(--bg-primary);
-            border: 1px solid var(--border);
-            color: var(--text-primary);
-            padding: 10px;
-            border-radius: 6px;
-            font-size: 0.95em;
-        }
-
-        .range-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
-        .color-input {
-            width: 100%;
-            height: 40px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-
-        .delete-btn {
-            background: var(--error);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1.2em;
-            transition: all 0.3s;
-        }
-
-        .delete-btn:hover {
-            background: #dc2626;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        th, td {
-            padding: 14px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            background: var(--bg-tertiary);
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        tr:hover {
-            background: rgba(59, 130, 246, 0.05);
-        }
-
-        .status-log {
-            background: var(--bg-tertiary);
-            padding: 20px;
-            border-radius: 12px;
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-        }
-
-        .log-entry {
-            margin-bottom: 8px;
-            color: var(--text-secondary);
-        }
-
-        .log-success {
-            color: var(--success);
-        }
-
-        .log-error {
-            color: var(--error);
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .stat-card {
-            background: var(--bg-tertiary);
-            padding: 20px;
-            border-radius: 12px;
-            border-left: 4px solid var(--accent);
-        }
-
-        .stat-label {
-            color: var(--text-muted);
-            font-size: 0.85em;
-            margin-bottom: 8px;
-        }
-
-        .stat-value {
-            font-size: 1.8em;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .leaflet-popup-content-wrapper {
-            background: var(--bg-secondary);
-            color: var(--text-primary);
-        }
-
-        .leaflet-popup-tip {
-            background: var(--bg-secondary);
-        }
-    </style>
+    .chip { display:inline-block; padding:6px 10px; border-radius:999px; background:#0b1222; border:1px solid #213055; color:#c7d2fe; font-size:12px; }
+    .year-btn { padding:8px 12px; border:1px solid #334155; background:#0b1222; color:#e2e8f0; border-radius:8px; cursor:pointer; }
+    .year-btn.active { background: var(--accent); color:#0b0f19; border-color: transparent; }
+  </style>
 </head>
 <body>
-    <div class="app-container">
-        <header>
-            <h1>🗺️ Houston ZIP Revenue Heatmap</h1>
-            <p class="subtitle">Client-side revenue visualization with auto-publish to GitHub</p>
-            <span class="status-badge" id="publishStatus">Checking...</span>
-        </header>
+  <div class="app-container">
+    <header>
+      <h1>🗺️ Houston ZIP Revenue Heatmap</h1>
+      <p class="subtitle">Client-side revenue visualization with optional auto-publish to GitHub</p>
+      <span class="status-badge" id="publishStatus">Checking…</span>
+    </header>
 
-        <div class="tabs">
-            <button class="tab active" data-tab="upload">📤 Data Upload</button>
-            <button class="tab" data-tab="map">🗺️ Map View</button>
-            <button class="tab" data-tab="table">📊 Table View</button>
-        </div>
-
-        <div class="tab-content active" id="upload-tab">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">Billing Records</div>
-                    <div class="stat-value" id="billingCount">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">ZIP Codes</div>
-                    <div class="stat-value" id="zipCount">0</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Total Revenue</div>
-                    <div class="stat-value" id="totalRevenue">$0</div>
-                </div>
-            </div>
-
-            <div class="upload-section">
-                <h2 class="section-title">📊 Billing Data</h2>
-                <div class="upload-area" id="billingUpload">
-                    <div class="upload-icon">📄</div>
-                    <p><strong>Drop billing files here</strong> or click to browse</p>
-                    <p style="color: var(--text-muted); margin-top: 8px;">Supports: CSV, XLS, XLSX</p>
-                    <input type="file" id="billingFiles" accept=".csv,.xls,.xlsx" multiple>
-                </div>
-            </div>
-
-            <div class="upload-section">
-                <h2 class="section-title">🗺️ ZIP Code Shapes</h2>
-                <div class="upload-area" id="zipUpload">
-                    <div class="upload-icon">📦</div>
-                    <p><strong>Drop ZIP shape files here</strong> or click to browse</p>
-                    <p style="color: var(--text-muted); margin-top: 8px;">Supports: ZIP (shapefile), GeoJSON</p>
-                    <input type="file" id="zipFiles" accept=".zip,.geojson" multiple>
-                </div>
-            </div>
-
-            <div class="section-title" style="margin-top: 32px;">📋 Status Log</div>
-            <div class="status-log" id="statusLog">
-                <div class="log-entry">Ready to process files...</div>
-            </div>
-        </div>
-
-        <div class="tab-content" id="map-tab">
-            <div class="map-controls">
-                <label class="toggle-label">
-                    <span>Show ZIP Labels</span>
-                    <div class="toggle-switch" id="labelToggle"></div>
-                </label>
-            </div>
-
-            <div class="color-ranges">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 class="section-title" style="margin: 0;">🎨 Color Ranges</h3>
-                    <button class="btn btn-primary" id="addRange">+ Add Range</button>
-                </div>
-                <div id="rangesList"></div>
-                <div class="range-row">
-                    <span style="grid-column: 1 / 3; color: var(--text-muted);">Else (unmatched values)</span>
-                    <input type="color" class="color-input" id="elseColor" value="#FFFFFF">
-                </div>
-            </div>
-
-            <div id="map"></div>
-        </div>
-
-        <div class="tab-content" id="table-tab">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 class="section-title" style="margin: 0;">Revenue by ZIP Code</h2>
-                <button class="btn btn-primary" id="downloadBtn">⬇️ Download JSON</button>
-            </div>
-            <div style="overflow-x: auto;">
-                <table id="dataTable">
-                    <thead>
-                        <tr>
-                            <th>ZIP Code</th>
-                            <th>Revenue</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBody">
-                        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No data loaded</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="upload">📤 Data Upload / Settings</button>
+      <button class="tab" data-tab="map">🗺️ Map View</button>
+      <button class="tab" data-tab="table">📊 Table View</button>
     </div>
 
-    <!-- Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/4.0.4/shp.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <div class="tab-content active" id="upload-tab">
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Billing Records (ZIP×Year)</div><div class="stat-value" id="billingCount">0</div></div>
+        <div class="stat-card"><div class="stat-label">ZIP Shapes</div><div class="stat-value" id="zipCount">0</div></div>
+        <div class="stat-card"><div class="stat-label">Total Revenue (all years)</div><div class="stat-value" id="totalRevenue">$0</div></div>
+      </div>
 
-    <script>
-        // ============= CONFIGURATION =============
-        const PUBLISH_CFG = {
-            owner: 'natran-analytics-fs',
-            repo: 'RevenueHeatMap',
-            branch: 'main',
-            token: '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'
-        };
+      <div class="upload-section">
+        <h2 class="section-title">📊 Billing Data</h2>
+        <div class="upload-area" id="billingUpload">
+          <div class="upload-icon">📄</div>
+          <p><strong>Drop billing files here</strong> or click to browse</p>
+          <p style="color: var(--text-muted); margin-top: 8px;">Supports: CSV, XLS, XLSX. Year auto-detected from file name (e.g., <span class="chip">Billing - 2024.xls</span>) or columns.</p>
+          <input type="file" id="billingFiles" accept=".csv,.xls,.xlsx" multiple />
+        </div>
+      </div>
 
-        const HOUSTON_BBOX = [-95.9, 29.5, -95.0, 30.2];
+      <div class="upload-section">
+        <h2 class="section-title">🗺️ ZIP Code Shapes</h2>
+        <div class="upload-area" id="zipUpload">
+          <div class="upload-icon">📦</div>
+          <p><strong>Drop ZIP shape files here</strong> or click to browse</p>
+          <p style="color: var(--text-muted); margin-top: 8px;">Supports: ZIP (shapefile), GeoJSON</p>
+          <input type="file" id="zipFiles" accept=".zip,.geojson,.json" multiple />
+        </div>
+      </div>
 
-        const DEFAULT_RANGES = [
-            { min: 2000, max: 5000, color: '#FF0000' },
-            { min: 5000, max: 15000, color: '#FFC0CB' },
-            { min: 15000, max: 30000, color: '#FFFF00' },
-            { min: 30000, max: 50000, color: '#90EE90' },
-            { min: 50000, max: 80000, color: '#228B22' },
-            { min: 80000, max: Infinity, color: '#1E90FF' }
-        ];
+      <div class="color-ranges" id="rangesPanelUpload">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 class="section-title" style="margin:0;">🎨 Color Ranges (also available on Map tab)</h3>
+          <button class="btn btn-primary" id="addRangeA">+ Add Range</button>
+        </div>
+        <div id="rangesListA"></div>
+        <div class="range-row"><span style="grid-column:1/3; color: var(--text-muted);">Else (unmatched values)</span><input type="color" class="color-input" id="elseColorA" value="#FFFFFF" /><div></div></div>
+        <button class="btn btn-secondary" id="saveRangesA">💾 Save Ranges</button>
+      </div>
 
-        // ============= STATE =============
-        let billingData = {};
-        let zipShapes = null;
-        let colorRanges = [...DEFAULT_RANGES];
-        let elseColor = '#FFFFFF';
-        let map = null;
-        let geoJsonLayer = null;
-        let labelLayer = null;
-        let labelsVisible = false;
+      <div class="section-title" style="margin-top: 12px;">📋 Status Log</div>
+      <div class="status-log" id="statusLog"><div class="log-entry">Ready to process files…</div></div>
+    </div>
 
-        // ============= STORAGE =============
-        const store = {
-            get: async (key) => {
-                try {
-                    const val = localStorage.getItem(key);
-                    return val ? JSON.parse(val) : null;
-                } catch (e) {
-                    return null;
-                }
-            },
-            set: async (key, val) => {
-                try {
-                    localStorage.setItem(key, JSON.stringify(val));
-                } catch (e) {
-                    console.error('Storage error:', e);
-                }
-            }
-        };
+    <div class="tab-content" id="map-tab">
+      <div class="map-controls">
+        <label class="toggle-label"><span>Show ZIP Labels</span><div class="toggle-switch" id="labelToggle"></div></label>
+        <span id="autoBadge" class="status-badge status-off">Auto-publish OFF</span>
+        <span class="chip">Year:</span>
+        <div id="yearButtons" style="display:flex; gap:6px;"></div>
+        <button class="btn btn-secondary" id="fitHouston">Fit Houston</button>
+      </div>
 
-        // ============= LOGGING =============
-        function log(msg, type = 'info') {
-            const logEl = document.getElementById('statusLog');
-            const entry = document.createElement('div');
-            entry.className = `log-entry ${type === 'error' ? 'log-error' : type === 'success' ? 'log-success' : ''}`;
-            const timestamp = new Date().toLocaleTimeString();
-            entry.textContent = `[${timestamp}] ${msg}`;
-            logEl.insertBefore(entry, logEl.firstChild);
+      <div class="color-ranges" id="rangesPanelMap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 class="section-title" style="margin:0;">🎨 Color Ranges</h3>
+          <button class="btn btn-primary" id="addRangeB">+ Add Range</button>
+        </div>
+        <div id="rangesListB"></div>
+        <div class="range-row"><span style="grid-column:1/3; color: var(--text-muted);">Else (unmatched values)</span><input type="color" class="color-input" id="elseColorB" value="#FFFFFF" /><div></div></div>
+        <button class="btn btn-secondary" id="saveRangesB">💾 Save Ranges</button>
+      </div>
+
+      <div id="map"></div>
+    </div>
+
+    <div class="tab-content" id="table-tab">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 class="section-title" style="margin:0;">Revenue Pivot — ZIP × Year</h2>
+        <button class="btn btn-primary" id="downloadBtn">⬇️ Download billing.json</button>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="dataTable"><thead id="pivotHead"></thead><tbody id="pivotBody"><tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/4.0.4/shp.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <script>
+    // ===================== CONFIG =====================
+    // Set via DevTools to enable auto-publish:
+    // localStorage.setItem('publishCfg', JSON.stringify({owner:'user',repo:'repo',branch:'main',token:'ghp_...'}))
+    const DEFAULT_PUBLISH_CFG = { owner:'', repo:'', branch:'main', token:'' };
+    const HOUSTON_BBOX = [-96.3, 28.8, -94.9, 30.3]; // wide Houston bbox
+
+    // “Py-inspired” color set + breaks (you can tweak with the UI):
+    const DEFAULT_RANGES = [
+      { min: 0,     max: 2000,  color: 'transparent' },
+      { min: 2001,  max: 5000,  color: '#FF0000' },   // red
+      { min: 5001,  max: 15000, color: '#FFC0CB' },   // pink
+      { min: 15001, max: 30000, color: '#FFFF00' },   // yellow
+      { min: 30001, max: 50000, color: '#90EE90' },   // light green
+      { min: 50001, max: 80000, color: '#228B22' },   // forest green
+      { min: 80001, max: Infinity, color: '#1E90FF' } // dodger blue
+    ];
+
+    // ===================== STATE =====================
+    // billingByYear: { [year]: { [zip]: revenue } }
+    let billingByYear = {};
+    let years = new Set();
+    let selectedYear = 'ALL';
+
+    let zipShapes = null;  // GeoJSON FeatureCollection
+    let ranges = [...DEFAULT_RANGES];
+    let elseColor = '#1E90FF';
+
+    let map = null, geoJsonLayer = null, labelLayer = null, labelsVisible = true;
+
+    // ===================== STORAGE =====================
+    const store = {
+      get: async (k) => { try { const v = localStorage.getItem(k); return v? JSON.parse(v) : null; } catch { return null; } },
+      set: async (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){ console.error('Storage error', e);} }
+    };
+
+    // ===================== LOGGING =====================
+    function log(msg, type='info') { const el=document.getElementById('statusLog'); const d=document.createElement('div'); d.className='log-entry'+(type==='error'?' log-error':type==='success'?' log-success':''); d.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`; el.prepend(d); }
+
+    // ===================== HELPERS =====================
+    const fmtUSD = (n)=> `$${Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+    const publishStatusEl = document.getElementById('publishStatus');
+    const autoBadge = document.getElementById('autoBadge');
+
+    function getPublishCfg(){ const ov = JSON.parse(localStorage.getItem('publishCfg')||'null'); return Object.assign({}, DEFAULT_PUBLISH_CFG, ov||{}); }
+    function setPublishBadges(){ const cfg=getPublishCfg(); const ok = !!(cfg.owner && cfg.repo && cfg.branch && cfg.token); publishStatusEl.className = 'status-badge ' + (ok? 'status-on':'status-off'); publishStatusEl.textContent = ok? 'Auto-publish READY' : 'Auto-publish OFF'; autoBadge.className = 'status-badge ' + (ok? 'status-on':'status-off'); autoBadge.textContent = ok? 'Auto-publish ON' : 'Auto-publish OFF'; }
+
+    function detectYearFromName(name){ const m = name.match(/20\d{2}/); return m? m[0] : null; }
+
+    // ===================== BILLING PARSERS =====================
+    async function parseBillingFile(file){
+      const name=file.name.toLowerCase();
+      if(name.endsWith('.csv')){ return parseCSVBilling(await file.text(), file.name); }
+      if(name.endsWith('.xls')||name.endsWith('.xlsx')){ return parseExcelBilling(await file.arrayBuffer(), file.name); }
+      throw new Error('Unsupported billing file');
+    }
+
+    function splitCSV(line){ const out=[]; let cur='', inQ=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ inQ=!inQ; continue; } if(ch===',' && !inQ){ out.push(cur); cur=''; continue; } cur+=ch; } out.push(cur); return out.map(s=>s.trim()); }
+
+    function parseCSVBilling(text, filename){
+      const res={year: detectYearFromName(filename)||'Unknown', data:{}};
+      const lines=text.split(/\r?\n/).filter(Boolean);
+      if(lines.length<2) return res;
+      const headers=splitCSV(lines[0]).map(h=>h.toLowerCase());
+      const zipCol=headers.findIndex(h=>h.includes('zip')||h.includes('subgroup'));
+      const amtCol=headers.findIndex(h=>h.includes('billed')||h.includes('amount')||h.includes('revenue'));
+      if(zipCol===-1||amtCol===-1) throw new Error('ZIP or Amount column missing');
+      for(let i=1;i<lines.length;i++){
+        const cols=splitCSV(lines[i]);
+        const zipStr=(cols[zipCol]||'').toString();
+        const amtStr=(cols[amtCol]||'').toString();
+        if(zipStr.toLowerCase().includes('unspecified')) continue;
+        const m=zipStr.match(/(\d{5})/);
+        if(!m) continue;
+        const zip=m[1];
+        const amt=parseFloat(amtStr.replace(/[^0-9.-]/g,''));
+        if(!isNaN(amt)) res.data[zip]=(res.data[zip]||0)+amt;
+      }
+      return res;
+    }
+
+    function parseExcelBilling(buf, filename){
+      const out={year: detectYearFromName(filename)||'Unknown', data:{}};
+      const wb=XLSX.read(buf,{type:'array'});
+      let sheetName=null;
+      for(const n of wb.SheetNames){
+        const l=n.toLowerCase();
+        if(l.includes('subgroup') && (l.includes('entr')||l.includes('entry'))){ sheetName=n; break; }
+      }
+      if(!sheetName) sheetName=wb.SheetNames[0];
+      const ws=wb.Sheets[sheetName];
+      const data=XLSX.utils.sheet_to_json(ws,{header:1});
+      if(!data.length) return out;
+      const headers=(data[0]||[]).map(h=>String(h||'').trim().toLowerCase());
+      const zipCol=headers.findIndex(h=>h.includes('zip')||h.includes('subgroup'));
+      const amtCol=headers.findIndex(h=>h.includes('billed')||h.includes('amount')||h.includes('revenue'));
+      const yearCol=headers.findIndex(h=>h==='year');
+      if(yearCol!==-1) out.year = String(data[1]?.[yearCol]||out.year);
+      if(zipCol===-1||amtCol===-1) throw new Error(`Columns not found in ${filename}`);
+      for(let i=1;i<data.length;i++){
+        const row=data[i]||[];
+        const zipStr=String(row[zipCol]||'');
+        const amtVal=row[amtCol];
+        if(zipStr.toLowerCase()==='unspecified') continue;
+        const m=zipStr.match(/(\d{5})/);
+        if(!m) continue;
+        const zip=m[1];
+        const amt=parseFloat(String(amtVal).replace(/[^0-9.-]/g,''));
+        if(!isNaN(amt)) out.data[zip]=(out.data[zip]||0)+amt;
+      }
+      return out;
+    }
+
+    // ===================== SHAPES =====================
+    async function parseShapeFile(file){
+      const name=file.name.toLowerCase();
+      if(name.endsWith('.geojson')||name.endsWith('.json')){ return JSON.parse(await file.text()); }
+      if(name.endsWith('.zip')){ const gj=await shp(await file.arrayBuffer()); return Array.isArray(gj)? {type:'FeatureCollection', features: gj.flatMap(fc => fc.type==='FeatureCollection'? fc.features : [fc])} : gj; }
+      throw new Error('Unsupported shape file');
+    }
+
+    function processZipShapes(features){
+      const out=[];
+      for(const f of features){
+        try{
+          if(!f.geometry) continue;
+          let clipped; try{ clipped=turf.bboxClip(f, HOUSTON_BBOX);}catch{clipped=f;}
+          let simple;  try{ simple=turf.simplify(clipped,{tolerance:0.0012, highQuality:false}); }catch{ simple=clipped; }
+          const p=f.properties||{};
+          const zip = p.ZCTA5CE10||p.ZCTA5CE20||p.ZCTA5||p.ZIP||p.ZIPCODE||p.zip||p.GEOID10||p.GEOID;
+          if(zip){ simple.properties={ ZIP: String(zip).padStart(5,'0') }; out.push(simple); }
+        }catch(e){ console.warn('Feature error', e); }
+      }
+      return { type:'FeatureCollection', features: out };
+    }
+
+    // ===================== FILE HANDLERS =====================
+    async function handleBillingFiles(files){
+      log(`Processing ${files.length} billing file(s)…`);
+      for(const f of files){
+        try{
+          const parsed=await parseBillingFile(f);
+          const yr = parsed.year || 'Unknown';
+          years.add(yr);
+          if(!billingByYear[yr]) billingByYear[yr] = {};
+          for(const [z,v] of Object.entries(parsed.data)) billingByYear[yr][z]=(billingByYear[yr][z]||0)+v;
+          log(`✓ ${f.name}: ${Object.keys(parsed.data).length} ZIPs for ${yr}`, 'success');
+        }catch(err){
+          log(`✗ ${f.name}: ${err.message}`, 'error');
         }
+      }
+      await store.set('billingByYear', billingByYear);
+      await store.set('years', Array.from(years));
+      updateYearButtons();
+      updateStats();
+      updateMap();
+      renderPivot();
+      await autoPublish('data/billing.json', {years: billingByYear});
+    }
 
-        // ============= BILLING PARSING =============
-        async function parseBillingFile(file) {
-            const filename = file.name.toLowerCase();
-
-            if (filename.endsWith('.csv')) {
-                const text = await file.text();
-                return parseCSVBilling(text);
-            } else if (filename.endsWith('.xls') || filename.endsWith('.xlsx')) {
-                const buffer = await file.arrayBuffer();
-                return parseExcelBilling(buffer, file.name);
-            }
-
-            throw new Error('Unsupported file format');
+    async function handleZipFiles(files){
+      log(`Processing ${files.length} shape file(s)…`);
+      let feats=[];
+      for(const f of files){
+        try{
+          const gj=await parseShapeFile(f);
+          feats = feats.concat((gj.features)||[]);
+          log(`✓ ${f.name}: ${(gj.features||[]).length} features`, 'success');
+        }catch(err){
+          log(`✗ ${f.name}: ${err.message}`, 'error');
         }
+      }
+      if(feats.length){
+        zipShapes = processZipShapes(feats);
+        await store.set('zipShapes', zipShapes);
+        updateStats();
+        updateMap();
+        await autoPublish('data/houston_zctas.geojson', zipShapes);
+      }
+    }
 
-        function parseCSVBilling(text) {
-            const result = {};
-            const lines = text.split('\n').filter(l => l.trim());
-            
-            if (lines.length < 2) return result;
-            
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-            const zipCol = headers.findIndex(h => h.includes('zip') || h.includes('subgroup'));
-            const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
-            
-            if (zipCol === -1 || amtCol === -1) {
-                throw new Error(`Could not find ZIP and Amount columns. Found: ${headers.join(', ')}`);
-            }
-            
-            for (let i = 1; i < lines.length; i++) {
-                const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
-                if (cols.length <= Math.max(zipCol, amtCol)) continue;
-                
-                const zipStr = cols[zipCol];
-                const amtStr = cols[amtCol];
-                
-                if (zipStr.toLowerCase().includes('unspecified')) continue;
-                
-                const zipMatch = zipStr.match(/(\d{5})/);
-                if (!zipMatch) continue;
-                const zip = zipMatch[1];
-                
-                const amt = parseFloat(amtStr.replace(/[^0-9.-]/g, ''));
-                if (isNaN(amt)) continue;
-                
-                result[zip] = (result[zip] || 0) + amt;
-            }
-            
-            return result;
+    // ===================== MAP + TABLE =====================
+    function initMap(){
+      map = L.map('map').setView([29.76,-95.37], 10);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ attribution:'© OpenStreetMap contributors' }).addTo(map);
+      updateMap();
+    }
+
+    function pickColor(v){
+      for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
+      return elseColor;
+    }
+
+    function currentRevenueFor(zip){
+      if(selectedYear==='ALL'){ let s=0; for(const y of Object.keys(billingByYear)) s += (billingByYear[y][zip]||0); return s; }
+      return (billingByYear[selectedYear]?.[zip])||0;
+    }
+
+    function updateMap(){
+      if(!map || !zipShapes) return;
+      if(geoJsonLayer) map.removeLayer(geoJsonLayer);
+      if(labelLayer) { map.removeLayer(labelLayer); labelLayer=null; }
+      geoJsonLayer = L.geoJSON(zipShapes, {
+        style: (feature)=>{
+          const z=feature.properties.ZIP;
+          const v=currentRevenueFor(z);
+          const col=pickColor(v);
+          return { fillColor: col, fillOpacity: col==='transparent'? 0.06 : 0.85, color:'#1e293b', weight: 0.6 };
+        },
+        onEachFeature: (f,layer)=>{
+          const z=f.properties.ZIP;
+          const details = Object.keys(billingByYear).map(y=>`<div>${y}: <b>${fmtUSD(billingByYear[y][z]||0)}</b></div>`).join('');
+          const total = fmtUSD(currentRevenueFor(z));
+          layer.bindPopup(`<strong>ZIP:</strong> ${z}<br><strong>Total:</strong> ${total}<hr>${details}`);
         }
+      }).addTo(map);
+      try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[20,20]}); }catch{}
+      if(labelsVisible) showLabels();
+    }
 
-        function parseExcelBilling(buffer, filename) {
-            const result = {};
-            
-            try {
-                const workbook = XLSX.read(buffer, { type: 'array' });
-                
-                let sheetName = null;
-                for (const name of workbook.SheetNames) {
-                    const lower = name.toLowerCase();
-                    if (lower.includes('subgroup') && lower.includes('entr')) {
-                        sheetName = name;
-                        break;
-                    }
-                }
-                
-                if (!sheetName) {
-                    sheetName = workbook.SheetNames[0];
-                }
-                
-                const sheet = workbook.Sheets[sheetName];
-                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                
-                if (data.length < 2) return result;
-                
-                const headers = data[0].map(h => String(h || '').trim().toLowerCase());
-                const zipCol = headers.findIndex(h => h.includes('subgroup') || h.includes('zip'));
-                const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
-                
-                if (zipCol === -1 || amtCol === -1) {
-                    throw new Error(`Could not find required columns in ${filename}`);
-                }
-                
-                for (let i = 1; i < data.length; i++) {
-                    const row = data[i];
-                    if (!row || row.length <= Math.max(zipCol, amtCol)) continue;
-                    
-                    const zipVal = String(row[zipCol] || '').trim();
-                    const amtVal = row[amtCol];
-                    
-                    if (zipVal.toLowerCase() === 'unspecified') continue;
-                    
-                    const zipMatch = zipVal.match(/(\d{5})/);
-                    if (!zipMatch) continue;
-                    const zip = zipMatch[1];
-                    
-                    const amt = parseFloat(String(amtVal).replace(/[^0-9.-]/g, ''));
-                    if (isNaN(amt)) continue;
-                    
-                    result[zip] = (result[zip] || 0) + amt;
-                }
-                
-            } catch (err) {
-                throw new Error(`Excel parsing error: ${err.message}`);
-            }
-            
-            return result;
+    function showLabels(){
+      if(labelLayer) map.removeLayer(labelLayer);
+      if(!zipShapes) return;
+      labelLayer=L.layerGroup();
+      for(const f of zipShapes.features){
+        try{
+          const c=turf.centroid(f).geometry.coordinates;
+          const zip=f.properties.ZIP;
+          const icon=L.divIcon({ className:'zip-label', html:`<div style="font-size:11px;font-weight:700;-webkit-text-stroke:2px white;color:black; mix-blend-mode:multiply">${zip}</div>` });
+          L.marker([c[1],c[0]],{icon}).addTo(labelLayer);
+        }catch{}
+      }
+      labelLayer.addTo(map);
+    }
+
+    function renderPivot(){
+      const head=document.getElementById('pivotHead');
+      const body=document.getElementById('pivotBody');
+      const yrList = ['ZIP', ...Array.from(years).sort()];
+      if(yrList.length===1){
+        head.innerHTML='';
+        body.innerHTML='<tr><td style="text-align:center;color:var(--text-muted);">No data loaded</td></tr>';
+        return;
+      }
+      head.innerHTML = `<tr>${yrList.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+      // rows by ZIP union across all years
+      const zipSet=new Set();
+      for(const y of Object.keys(billingByYear)) for(const z of Object.keys(billingByYear[y])) zipSet.add(z);
+      const rows=[...zipSet].sort().map(zip=>{
+        const tds=[`<td>${zip}</td>`];
+        for(const y of yrList.slice(1)) tds.push(`<td>${fmtUSD(billingByYear[y]?.[zip]||0)}</td>`);
+        return `<tr>${tds.join('')}</tr>`;
+      });
+      body.innerHTML = rows.join('');
+    }
+
+    function updateYearButtons(){
+      const cont=document.getElementById('yearButtons');
+      const ys = Array.from(years).sort();
+      cont.innerHTML='';
+      const mk=(y,lbl)=>{
+        const b=document.createElement('button');
+        b.className='year-btn'+(selectedYear===y?' active':'');
+        b.textContent=lbl;
+        b.onclick=()=>{ selectedYear=y; updateYearButtons(); updateMap(); };
+        cont.appendChild(b);
+      };
+      mk('ALL','All');
+      ys.forEach(y=>mk(y,String(y)));
+    }
+
+    function updateStats(){
+      let cells=0, total=0;
+      for(const y of Object.keys(billingByYear)){
+        for(const v of Object.values(billingByYear[y])){
+          if(v>0) cells++;
+          total+=v;
         }
+      }
+      document.getElementById('billingCount').textContent = cells;
+      document.getElementById('zipCount').textContent = zipShapes? zipShapes.features.length : 0;
+      document.getElementById('totalRevenue').textContent = fmtUSD(total);
+    }
 
-        // ============= SHAPEFILE PARSING =============
-        async function parseShapeFile(file) {
-            if (file.name.toLowerCase().endsWith('.geojson')) {
-                const text = await file.text();
-                return JSON.parse(text);
-            } else if (file.name.toLowerCase().endsWith('.zip')) {
-                const buffer = await file.arrayBuffer();
-                const geojson = await shp(buffer);
-                
-                if (Array.isArray(geojson)) {
-                    return {
-                        type: 'FeatureCollection',
-                        features: geojson.flatMap(item => 
-                            item.type === 'FeatureCollection' ? item.features : [item]
-                        )
-                    };
-                }
-                
-                return geojson;
-            }
-            
-            throw new Error('Unsupported shape file format');
-        }
+    // ===================== COLOR RANGES UI (two panels share state) =====================
+    function renderRanges(panel){
+      const holder=document.getElementById(panel==='A'?'rangesListA':'rangesListB');
+      holder.innerHTML='';
+      ranges.forEach((r,idx)=>{
+        const row=document.createElement('div');
+        row.className='range-row';
+        row.innerHTML = `
+          <input class="range-input" type="number" step="1" value="${r.min===Infinity?'':r.min}" placeholder="Min" />
+          <input class="range-input" type="number" step="1" value="${r.max===Infinity?'':r.max}" placeholder="Max (blank = ∞)" />
+          <input class="color-input" type="color" value="${r.color==='transparent' ? '#ffffff' : r.color}" />
+          <button class="delete-btn">✕</button>`;
+        const [minEl,maxEl,colEl,delEl] = row.children;
+        delEl.onclick=()=>{ ranges.splice(idx,1); renderRanges('A'); renderRanges('B'); updateMap(); saveRanges(); };
+        minEl.onchange=()=>{ r.min= minEl.value===''? 0 : Number(minEl.value); updateMap(); saveRanges(); };
+        maxEl.onchange=()=>{ r.max= maxEl.value===''? Infinity : Number(maxEl.value); updateMap(); saveRanges(); };
+        colEl.onchange=()=>{ r.color= (colEl.value==='transparent')? 'transparent' : colEl.value; updateMap(); saveRanges(); };
+        holder.appendChild(row);
+      });
+      (panel==='A'?document.getElementById('elseColorA'):document.getElementById('elseColorB')).value = elseColor;
+    }
+    function saveRanges(){ store.set('ranges',{ranges, else:elseColor}); log('Color ranges saved','success'); autoPublish('data/ranges.json', {ranges, else:elseColor}); }
 
-        function processZipShapes(features) {
-            const processed = [];
+    // ===================== AUTO PUBLISH =====================
+    async function autoPublish(path, content){
+      const cfg=getPublishCfg(); const ok = !!(cfg.owner && cfg.repo && cfg.branch && cfg.token);
+      setPublishBadges();
+      if(!ok){ log('Auto-publish skipped (no repo config)'); return; }
+      try{
+        const apiBase=`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/`;
+        let sha=null; const head=await fetch(apiBase+path+`?ref=${cfg.branch}`);
+        if(head.ok){ const j=await head.json(); sha=j.sha; }
+        const body = typeof content==='string'? content : JSON.stringify(content);
+        const res=await fetch(apiBase+path,{
+          method:'PUT',
+          headers:{ 'Authorization':`Bearer ${cfg.token}`,'Content-Type':'application/json' },
+          body: JSON.stringify({ message:`auto: update ${path} ${new Date().toISOString()}`, content: btoa(unescape(encodeURIComponent(body))), branch: cfg.branch, sha })
+        });
+        if(!res.ok){ const t=await res.text(); throw new Error(`${res.status}: ${t}`); }
+        log(`Published ${path}`,'success');
+      }catch(e){ log(`Publish failed for ${path}: ${e.message}`,'error'); }
+    }
 
-            for (const feature of features) {
-                try {
-                    if (!feature.geometry) continue;
-                    
-                    let clipped;
-                    try {
-                        clipped = turf.bboxClip(feature, HOUSTON_BBOX);
-                    } catch (e) {
-                        clipped = feature;
-                    }
-                    
-                    let simplified;
-                    try {
-                        simplified = turf.simplify(clipped, { tolerance: 0.001, highQuality: false });
-                    } catch (e) {
-                        simplified = clipped;
-                    }
-                    
-                    const props = feature.properties || {};
-                    const zipCode = props.ZCTA5CE10 || 
-                                   props.ZCTA5CE20 || 
-                                   props.ZCTA5 ||
-                                   props.ZIP || 
-                                   props.ZIPCODE ||
-                                   props.zip ||
-                                   props.GEOID10 ||
-                                   props.GEOID;
-                    
-                    if (zipCode) {
-                        simplified.properties = { ZIP: String(zipCode).padStart(5, '0') };
-                        processed.push(simplified);
-                    }
-                } catch (err) {
-                    console.warn('Error processing feature:', err);
-                }
-            }
+    // ===================== UI WIRING =====================
+    document.querySelectorAll('.tab').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab=btn.dataset.tab;
+        document.querySelectorAll('.tab-content').forEach(s=>s.classList.remove('active'));
+        document.getElementById(`${tab}-tab`).classList.add('active');
+        if(tab==='map' && !map) initMap();
+        if(tab==='table') renderPivot();
+      });
+    });
 
-            return {
-                type: 'FeatureCollection',
-                features: processed
-            };
-        }
+    document.getElementById('labelToggle').addEventListener('click', ()=>{
+      labelsVisible=!labelsVisible;
+      document.getElementById('labelToggle').classList.toggle('active', labelsVisible);
+      if(labelsVisible) showLabels(); else if(labelLayer){ map.removeLayer(labelLayer); labelLayer=null; }
+    });
 
-        // ============= FILE HANDLING =============
-        async function handleBillingFiles(files) {
-            log(`Processing ${files.length} billing file(s)...`);
-            
-            for (const file of files) {
-                try {
-                    const parsed = await parseBillingFile(file);
-                    Object.assign(billingData, parsed);
-                    log(`✓ Processed ${file.name}: ${Object.keys(parsed).length} ZIPs`, 'success');
-                } catch (err) {
-                    log(`✗ Error processing ${file.name}: ${err.message}`, 'error');
-                }
-            }
+    document.getElementById('fitHouston').addEventListener('click', ()=>{
+      if(map && geoJsonLayer){ try{ map.fitBounds(geoJsonLayer.getBounds(), {padding:[20,20]}); }catch{} }
+    });
 
-            await store.set('billingData', billingData);
-            updateStats();
-            updateMap();
-            updateTable();
-            await autoPublish('data/billing.json', billingData);
-        }
+    document.getElementById('addRangeA').addEventListener('click', ()=>{
+      ranges.push({min:0,max:Infinity,color:'#cccccc'}); renderRanges('A'); renderRanges('B'); saveRanges();
+    });
+    document.getElementById('addRangeB').addEventListener('click', ()=>{
+      ranges.push({min:0,max:Infinity,color:'#cccccc'}); renderRanges('A'); renderRanges('B'); saveRanges();
+    });
+    document.getElementById('elseColorA').addEventListener('change', (e)=>{ elseColor=e.target.value; saveRanges(); updateMap(); });
+    document.getElementById('elseColorB').addEventListener('change', (e)=>{ elseColor=e.target.value; saveRanges(); updateMap(); });
+    document.getElementById('saveRangesA').addEventListener('click', saveRanges);
+    document.getElementById('saveRangesB').addEventListener('click', saveRanges);
 
-        async function handleZipFiles(files) {
-            log(`Processing ${files.length} shape file(s)...`);
-            let allFeatures = [];
+    document.getElementById('downloadBtn').addEventListener('click', ()=>{
+      const blob=new Blob([JSON.stringify({years:billingByYear},null,2)],{type:'application/json'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='billing.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
 
-            for (const file of files) {
-                try {
-                    const geojson = await parseShapeFile(file);
-                    allFeatures = allFeatures.concat(geojson.features);
-                    log(`✓ Processed ${file.name}: ${geojson.features.length} features`, 'success');
-                } catch (err) {
-                    log(`✗ Error processing ${file.name}: ${err.message}`, 'error');
-                }
-            }
+    function setupUploader(boxId, inputId, handler){
+      const box=document.getElementById(boxId);
+      const input=document.getElementById(inputId);
+      const pick=()=>input.click();
+      box.addEventListener('click', pick);
+      box.addEventListener('dragover', e=>{ e.preventDefault(); box.classList.add('dragover'); });
+      box.addEventListener('dragleave', ()=> box.classList.remove('dragover'));
+      box.addEventListener('drop', async e=>{ e.preventDefault(); box.classList.remove('dragover'); await handler(e.dataTransfer.files); });
+      input.addEventListener('change', async e=>{ await handler(e.target.files); input.value=''; });
+    }
 
-            if (allFeatures.length > 0) {
-                zipShapes = processZipShapes(allFeatures);
-                await store.set('zipShapes', zipShapes);
-                updateStats();
-                updateMap();
-                await autoPublish('data/houston_zctas.geojson', zipShapes);
-            }
-        }
+    setupUploader('billingUpload','billingFiles', handleBillingFiles);
+    setupUploader('zipUpload','zipFiles', handleZipFiles);
 
-        // ============= MAP =============
-        function initMap() {
-            map = L.map('map').setView([29.76, -95.37], 10);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-
-            updateMap();
-        }
-
-        function updateMap() {
-            if (!map) return;
-
-            if (geoJsonLayer) {
-                map.removeLayer(geoJsonLayer);
-            }
-            if (labelLayer) {
-                map.removeLayer(labelLayer);
-            }
-
-            if (!zipShapes) return;
-
-            geoJsonLayer = L.geoJSON(zipShapes, {
-                style: (feature) => {
-                    const zip = feature.properties.ZIP;
-                    const revenue = billingData[zip] || 0;
-                    const color = getColorForRevenue(revenue);
-                    
-                    return {
-                        fillColor: color,
-                        fillOpacity: 0.7,
-                        color: '#1e293b',
-                        weight: 1
-                    };
-                },
-                onEachFeature: (feature, layer) => {
-                    const zip = feature.properties.ZIP;
-                    const revenue = billingData[zip] || 0;
-                    layer.bindPopup(`
-                        <strong>ZIP:</strong> ${zip}<br>
-                        <strong>Revenue:</strong> $${revenue.toLocaleString()}
-                    `);
-                }
-            }).addTo(map);
-
-            map.fitBounds(geoJsonLayer.getBounds());
-
-            if (labelsVisible) {
-                showLabels();
-            }
-        }
-
-        function getColorForRevenue(revenue) {
-            for (const range of colorRanges) {
-                if (revenue >= range.min && revenue < range.max) {
-                    return range.color;
-                }
-            }
-            return elseColor;
-        }
-
-        function toggleLabels() {
-            labelsVisible = !labelsVisible;
-            const toggle = document.getElementById('labelToggle');
-            toggle.classList.toggle('active', labelsVisible);
-            
-            if (labelsVisible) {
-                showLabels();
-            } else {
-                if (labelLayer) {
-                    map.removeLayer(labelLayer);
-                    labelLayer = null;
-                }
-            }
-        }
-
-        function showLabels() {
-            if (labelLayer) {
-                map.removeLayer(labelLayer);
-            }
-            if (!zipShapes) return;
-
-            const markers = [];
-            for (const feature of zipShapes.features) {
-                try {
-                    const centroid = turf.centroid(feature);
-                    const coords = centroid.geometry.coordinates;
-                    const zip = feature.properties.ZIP;
-                    
-                    const marker = L.marker([coords[1], coords[0]], {
-                        icon: L.divIcon({
-                            className: 'zip-label',
-                            html: `<div style="background: rgba(255,255,255,0.8); padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold; color: #000;">${zip}</div>`,
-                            iconSize: [50, 20]
-                        })
-                    });
+    // ===================== INIT =====================
+    (async function init(){
+      setPublishBadges();
+      const savedByYear=await store.get('billingByYear');
+      const savedYears=await store.get('years');
+      const savedShapes=await store.get('zipShapes');
+      const savedRanges=await store.get('ranges');
+      if(savedByYear){ billingByYear=savedByYear; years=new Set(Object.keys(savedByYear)); }
+      if(savedYears){ years=new Set(savedYears); }
+      if(savedShapes) zipShapes=savedShapes;
+      if(savedRanges){ ranges=savedRanges.ranges||DEFAULT_RANGES; elseColor=savedRanges.else||elseColor; }
+      updateYearButtons();
+      updateStats();
+      if(document.querySelector('.tab.active').dataset.tab==='map' && !map) initMap();
+      renderRanges('A'); renderRanges('B');
+      if(map) updateMap();
+    })();
+  </script>
+</body>
+</html>
