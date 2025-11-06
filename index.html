@@ -33,11 +33,13 @@
   .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
   .warn{background:#291a1a;border:1px solid #623e3e;color:#ffbdbd;padding:8px 10px;border-radius:10px}
   .ok{color:#4caf50}
+  .zip-label div{padding:2px 4px;border-radius:6px;background:rgba(255,255,255,0.7);color:#0a1020;font-weight:600;box-shadow:0 0 6px rgba(0,0,0,0.35)}
 </style>
 </head>
 <body>
 <header>
   <h1>Houston Revenue by ZIP</h1>
+  <div id="publish-badge" class="chip" style="display:none"></div>
   <nav>
     <button data-tab="upload" class="active">Data Upload / Status</button>
     <button data-tab="map">Map</button>
@@ -133,10 +135,10 @@
    Use a fine-grained token limited to this repo and rotate it regularly.
 */
 const PUBLISH_CFG = {
-  owner:  "natran-analytics-fs",
-  repo:   "RevenueHeatMap",
-  branch: "Main", // note: branch names are case-sensitive in API calls
-  token:  "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"
+  owner:  "",
+  repo:   "",
+  branch: "main", // note: branch names are case-sensitive in API calls
+  token:  ""
 };
 // If you want to override at runtime without editing the file, you can set localStorage:
 // localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"...",repo:"...",branch:"...",token:"..."}));
@@ -157,17 +159,49 @@ const { set:dbSet, get:dbGet } = idbKeyval;
 const DB = { BILLING:'billing-local', ZCTA:'zcta-local', RANGES:'ranges' };
 const fmtUSD = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
 const nowISO = () => new Date().toISOString();
+const toBase64 = str => {
+  const utf8 = new TextEncoder().encode(str);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i=0;i<utf8.length;i+=chunk){
+    const sub = utf8.subarray(i, i+chunk);
+    binary += String.fromCharCode.apply(null, sub);
+  }
+  return btoa(binary);
+};
+const detectColumn = (rows, patterns) => {
+  const regex = new RegExp(patterns.map(p=>`(${p})`).join('|'), 'i');
+  for(const row of rows){
+    for(const key of Object.keys(row||{})){
+      if(!key) continue;
+      if(regex.test(key)) return key;
+    }
+  }
+  return null;
+};
+const coerceAmount = val => {
+  if(val==null) return NaN;
+  if(typeof val === 'number') return val;
+  const str = String(val).replace(/[^0-9.\-]/g,'');
+  if(!str) return NaN;
+  return Number(str);
+};
 
 function showPublishBanner(){
   const warn = document.getElementById('pub-warning');
+  const badge = document.getElementById('publish-badge');
   if(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token){
     warn.style.display = 'none';
     document.getElementById('live-badge').innerHTML = '<span class="chip">Auto-publish: <b class="ok">ON</b></span>';
+    badge.style.display='inline-flex';
+    badge.innerHTML='Auto-publish <b class="ok">ON</b>';
   } else {
     warn.style.display = 'block';
     warn.innerHTML = `Auto-publish is <b>OFF</b>. Set <span class="kbd">PUBLISH_CFG</span> (owner/repo/branch/token) or via:
     <br><span class="kbd">localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"you",repo:"repo",branch:"main",token:"ghp_xxx"}))</span>`;
     document.getElementById('live-badge').textContent = '';
+    badge.style.display='inline-flex';
+    badge.innerHTML='Auto-publish <b style="color:#ff7676">OFF</b>';
   }
 }
 showPublishBanner();
@@ -192,6 +226,7 @@ document.getElementById('save-ranges').onclick=saveRanges;
   let r=await dbGet(DB.RANGES);
   if(!r){ r={ranges:DEFAULT_RANGES, else:ELSE_COLOR}; await dbSet(DB.RANGES, r); }
   rangesDiv.innerHTML=''; (r.ranges||DEFAULT_RANGES).forEach(addRangeRow); addElseRow(r.else||ELSE_COLOR);
+  await refreshLocalStatus();
 })();
 function addRangeRow({min,max,color}){
   const row=document.createElement('div'); row.className='range-row';
@@ -214,7 +249,7 @@ async function saveRanges(){
   }
   const cfg = {ranges:out, else:elseCol};
   await dbSet(DB.RANGES, cfg);
-  document.getElementById('chip-ranges').textContent = 'ranges.json (local)';
+  await refreshLocalStatus();
   // auto-publish ranges too
   autoPublish({ ranges: cfg });
 }
@@ -229,6 +264,7 @@ billingInput.onchange = async (e)=>{
   const files=[...e.target.files];
   if(!files.length) return;
   const totals=new Map();
+  let scanned=0, skipped=0;
   for(const f of files){
     const buf=await f.arrayBuffer();
     let rows=[];
@@ -237,40 +273,60 @@ billingInput.onchange = async (e)=>{
       rows=csvToRows(text);
     }else{
       const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
-      rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      rows=XLSX.utils.sheet_to_json(ws,{defval:'', raw:false});
+    }
+    if(!rows.length) continue;
+    const zipKey = detectColumn(rows, ['zip','postal','zcta','geoid']);
+    const amtKey = detectColumn(rows, ['amount','revenue','billed','charge','total']);
+    if(!zipKey || !amtKey){
+      console.warn('Unable to detect ZIP or Amount columns in', f.name);
+      continue;
     }
     for(const r of rows){
-      const raw=(r['Zip']||r['Zip Code']||r['ZCTA']||r['zip']||r['zip code']||r['postal']||'').toString();
-      const m=raw.match(/(\d{5})/); if(!m) continue;
+      scanned++;
+      const raw = (r[zipKey] ?? '').toString();
+      const m=raw.match(/(\d{5})/);
+      if(!m){ skipped++; continue; }
       const zip=m[1];
-      const val=(r['Billed']??r['Revenue']??r['Amount']??r['Total']??0).toString().replace(/[, ]/g,'');
-      const amt=Number(val); if(!isFinite(amt)) continue;
+      const amt=coerceAmount(r[amtKey]);
+      if(!isFinite(amt)){ skipped++; continue; }
       totals.set(zip, (totals.get(zip)||0)+amt);
     }
   }
   const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
   await dbSet(DB.BILLING, list);
-  billingStatus.textContent = `Processed ${files.length} file(s) • ${list.length} ZIP rows stored locally.`;
-  document.getElementById('chip-bill').textContent = 'billing.json (local)';
+  await refreshLocalStatus();
+  billingStatus.textContent =
+    `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
+  billingInput.value='';
   // auto-publish
   autoPublish({ billing: list });
 };
 function csvToRows(text){
-  const lines=text.split(/\r?\n/).filter(Boolean);
-  const head=splitCSV(lines.shift());
+  const cleaned = text.replace(/^\uFEFF/, '');
+  const lines=cleaned.split(/\r?\n/).filter(ln=>ln.trim().length);
+  if(!lines.length) return [];
+  const head=splitCSV(lines.shift()).map(h=>h.trim());
   return lines.map(ln=>{
-    const cols=splitCSV(ln); const o={}; head.forEach((h,i)=>o[h]=cols[i]??''); return o;
+    const cols=splitCSV(ln);
+    const o={}; head.forEach((h,i)=>{ if(h) o[h]=cols[i]??''; });
+    return o;
   });
 }
 function splitCSV(line){
-  const out=[]; let cur='', inQ=false;
+  const out=[]; let cur=''; let inQ=false;
   for(let i=0;i<line.length;i++){
     const ch=line[i];
-    if(ch==='\"'){ inQ=!inQ; continue; }
-    if(ch===',' && !inQ){ out.push(cur); cur=''; continue; }
+    if(ch==='"'){
+      if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
+      else { inQ=!inQ; }
+      continue;
+    }
+    if(ch===',' && !inQ){ out.push(cur.trim()); cur=''; continue; }
     cur+=ch;
   }
-  out.push(cur); return out.map(s=>s.trim());
+  out.push(cur.trim());
+  return out;
 }
 
 /* =========================
@@ -296,7 +352,22 @@ zctaInput.onchange = async (e)=>{
   }
 
   // Merge → FeatureCollection
-  const all = { type:'FeatureCollection', features: fcList.flatMap(fc => fc.features || []) };
+  const allFeatures=[];
+  for(const fc of fcList){
+    if(!fc) continue;
+    if(Array.isArray(fc)){
+      allFeatures.push(...fc);
+    }else if(fc.type==='FeatureCollection'){
+      allFeatures.push(...(fc.features||[]));
+    }else if(fc.type==='Feature'){
+      allFeatures.push(fc);
+    }
+  }
+  if(!allFeatures.length){
+    zctaStatus.textContent = 'No valid polygon features found in uploads.';
+    return;
+  }
+  const all = { type:'FeatureCollection', features: allFeatures };
 
   // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
   const bbox = [-96.3, 28.8, -94.9, 30.3];
@@ -311,11 +382,39 @@ zctaInput.onchange = async (e)=>{
   const simplified = turf.simplify(clipped, {tolerance:0.0012, highQuality:false, mutate:false});
 
   await dbSet(DB.ZCTA, simplified);
+  await refreshLocalStatus();
   zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
-  document.getElementById('chip-zcta').textContent = 'houston_zctas.geojson (local)';
+  zctaInput.value='';
   // auto-publish
   autoPublish({ zcta: simplified });
 };
+
+async function refreshLocalStatus(){
+  const [billing,zcta,ranges] = await Promise.all([
+    dbGet(DB.BILLING),
+    dbGet(DB.ZCTA),
+    dbGet(DB.RANGES)
+  ]);
+  if(billing && billing.length){
+    billingStatus.textContent = `Loaded ${billing.length} ZIP rows from storage.`;
+    document.getElementById('chip-bill').textContent = `billing.json (${billing.length} ZIPs)`;
+  } else {
+    billingStatus.textContent = 'No billing data in storage.';
+    document.getElementById('chip-bill').textContent = 'billing.json (missing)';
+  }
+  if(zcta && zcta.features){
+    zctaStatus.textContent = `Loaded ${zcta.features.length} ZIP features from storage.`;
+    document.getElementById('chip-zcta').textContent = `houston_zctas.geojson (${zcta.features.length})`;
+  } else {
+    zctaStatus.textContent = 'No shapes in storage.';
+    document.getElementById('chip-zcta').textContent = 'houston_zctas.geojson (missing)';
+  }
+  if(ranges){
+    document.getElementById('chip-ranges').textContent = 'ranges.json (saved)';
+  } else {
+    document.getElementById('chip-ranges').textContent = 'ranges.json (missing)';
+  }
+}
 
 /* =========================
    6) Map & Table
@@ -335,9 +434,18 @@ function ensureMap(){
   drawChoropleth();
 }
 function centroid(geom){
+  if(!geom) return null;
+  try{
+    const feature = {type:'Feature', geometry:geom, properties:{}};
+    const pt = turf.centerOfMass(feature);
+    if(pt && pt.geometry && Array.isArray(pt.geometry.coordinates)){
+      return pt.geometry.coordinates;
+    }
+  }catch(err){ /* fall back below */ }
   const polys = geom.type==='Polygon' ? [geom.coordinates] : geom.type==='MultiPolygon' ? geom.coordinates : null;
   if(!polys || !polys.length) return null;
-  const ring = polys[0][0]; let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
+  const ring = polys[0][0]; if(!ring || !ring.length) return null;
+  let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
   return [x/ring.length, y/ring.length];
 }
 function pickColor(v, ranges, elseColor){
@@ -362,6 +470,7 @@ async function drawChoropleth(){
   if(geoLayer) map.removeLayer(geoLayer);
   if(labelLayer) map.removeLayer(labelLayer);
   labelLayer=L.layerGroup();
+  const placedLabels=[];
 
   geoLayer = L.geoJSON(zctas, {
     style: f=>{
@@ -376,9 +485,13 @@ async function drawChoropleth(){
       layer.bindTooltip(`ZIP ${zip}<br>$${fmtUSD(v)}`, {sticky:true});
       const c = centroid(f.geometry);
       if(c){
-        const divIcon = L.divIcon({ className:'zip-label', html:`<div style="font-size:11px;font-weight:700;-webkit-text-stroke:2px white;color:black; mix-blend-mode:multiply">${zip}</div>`});
-        const marker = L.marker([c[1], c[0]], { icon: divIcon });
-        marker.addTo(labelLayer);
+        const latlng = L.latLng(c[1], c[0]);
+        if(!placedLabels.some(p=>p.distanceTo(latlng)<2500)){
+          placedLabels.push(latlng);
+          const divIcon = L.divIcon({ className:'zip-label', html:`<div>${zip}</div>` });
+          const marker = L.marker([c[1], c[0]], { icon: divIcon, interactive:false });
+          marker.addTo(labelLayer);
+        }
       }
     }
   }).addTo(map);
@@ -426,14 +539,16 @@ async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
   const apiBase = `https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/`;
   async function putFile(p){
     let sha=null;
-    const head = await fetch(apiBase+p.path+`?ref=${PUBLISH_CFG.branch}`);
+    const head = await fetch(apiBase+p.path+`?ref=${PUBLISH_CFG.branch}`, {
+      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}` }
+    });
     if(head.ok){ const j=await head.json(); sha=j.sha; }
     const res = await fetch(apiBase+p.path, {
       method:'PUT',
       headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}`, 'Content-Type':'application/json' },
       body: JSON.stringify({
         message: `auto: update ${p.path} ${nowISO()}`,
-        content: btoa(unescape(encodeURIComponent(p.content))),
+        content: toBase64(p.content),
         branch: PUBLISH_CFG.branch,
         sha
       })
@@ -458,6 +573,7 @@ async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
    8) Init (try publishing if data already present)
    ========================= */
 document.addEventListener('DOMContentLoaded', async ()=>{
+  await refreshLocalStatus();
   // If user already uploaded earlier in this browser, publish right away
   autoPublish();
 });
