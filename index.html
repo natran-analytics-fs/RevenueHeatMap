@@ -111,6 +111,37 @@
   .range-row input[type="color"] { width: 48px; height: 32px; border: none; border-radius: 8px; }
   .warn { background: rgba(102, 25, 25, 0.22); border: 1px solid rgba(255, 97, 97, 0.55); border-radius: 12px; padding: 12px 14px; color: #ffaaaa; }
   .zip-label div { padding: 2px 4px; background: rgba(255,255,255,0.85); color: #091126; border-radius: 6px; font-weight: 600; box-shadow: 0 0 6px rgba(0,0,0,0.45); }
+  :root{--bg:#0b0f19;--panel:#131a2a;--muted:#99a3b3;--text:#e8eefc;--accent:#6aa6ff;--chip:#1b2438}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;gap:12px;align-items:center;padding:14px 18px;background:#0f1524;border-bottom:1px solid #1d2740}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  nav{margin-left:auto;display:flex;gap:8px}
+  nav button{background:var(--chip);color:var(--text);border:1px solid #2a3654;padding:8px 12px;border-radius:10px;cursor:pointer}
+  nav button.active{background:var(--accent);color:#0a0f1c;border-color:transparent}
+  main{padding:18px}
+  .panel{background:var(--panel);border:1px solid #1d2740;border-radius:14px;padding:14px;margin-bottom:16px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .col{flex:1 1 320px}
+  .muted{color:var(--muted)}
+  .chip{background:var(--chip);padding:6px 10px;border-radius:999px;border:1px solid #263252;font-size:12px;margin-right:6px}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:2px 6px; background:#121a2c; border:1px solid #1f2945; border-radius:6px}
+  .btn{background:#16213a;color:var(--text);border:1px solid #29406d;padding:8px 10px;border-radius:10px;cursor:pointer}
+  .btn.accent{background:var(--accent);color:#0b0f19;border-color:transparent}
+  .note{font-size:12px;color:#a9b5ca}
+  .tiny{font-size:12px}
+  input[type="file"]{display:block;margin-top:8px}
+  #map{height:64vh;border-radius:12px;border:1px solid #223055}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid #1f2945;white-space:nowrap}
+  th{position:sticky;top:0;background:#121a2c;text-align:left}
+  .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
+  .warn{background:#291a1a;border:1px solid #623e3e;color:#ffbdbd;padding:8px 10px;border-radius:10px}
+  .status-log{margin-top:10px;font-size:12px;line-height:1.5;max-height:120px;overflow:auto;padding:10px;border-radius:10px;background:#12192b;border:1px solid #1f2945}
+  .status-log b{color:#6aa6ff}
+  .status-log .err{color:#ff8686}
+  .ok{color:#4caf50}
+  .zip-label div{padding:2px 4px;border-radius:6px;background:rgba(255,255,255,0.7);color:#0a1020;font-weight:600;box-shadow:0 0 6px rgba(0,0,0,0.35)}
 </style>
 </head>
 <body>
@@ -166,6 +197,7 @@
         <span class="chip" id="chip-ranges">ranges.json</span>
       </div>
       <div id="publish-status" class="tiny muted" style="margin-top:8px;">Waiting for complete datasets…</div>
+      <div class="tiny muted" id="pub-status" style="margin-top:8px">Awaiting uploads…</div>
       <div id="status-log" class="status-log"></div>
     </div>
   </section>
@@ -258,6 +290,69 @@ if (!window.idbKeyval) {
   window.idbKeyval = { get, set, del, clear, keys };
 }
 </script>
+<script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval.iife.js"></script>
+<script>
+// Fallback for idb-keyval when CDN is unavailable (e.g. network blocks). This mirrors
+// the tiny API surface we use (get/set/del/clear/keys/update) so the rest of the app
+// continues to function client-side even if the CDN fails to load. Based on idb-keyval@6.
+if(!window.idbKeyval){
+  const DB_NAME = 'idb-keyval';
+  const STORE_NAME = 'keyval';
+  const openDatabase = () => new Promise((resolve, reject)=>{
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = ()=>{
+      if(!request.result.objectStoreNames.contains(STORE_NAME)){
+        request.result.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onerror = ()=> reject(request.error);
+    request.onsuccess = ()=> resolve(request.result);
+  });
+  const withStore = (mode, handler) => openDatabase().then(db=>new Promise((resolve, reject)=>{
+    const tx = db.transaction(STORE_NAME, mode);
+    const store = tx.objectStore(STORE_NAME);
+    let request;
+    let handledByPromise = false;
+    try {
+      request = handler(store);
+    } catch(err) {
+      reject(err);
+      tx.abort();
+      db.close();
+      return;
+    }
+    if(request && typeof request.then === 'function'){
+      handledByPromise = true;
+      request.then(value=>resolve(value)).catch(err=>{
+        tx.abort();
+        reject(err);
+      });
+    }
+    tx.oncomplete = ()=>{ db.close(); if(!handledByPromise) resolve(request?.result); };
+    tx.onabort = tx.onerror = ()=>{ const err = tx.error || new Error('IDB transaction aborted'); db.close(); reject(err); };
+  }));
+  const get = (key)=> withStore('readonly', store=>store.get(key));
+  const set = (key, value)=> withStore('readwrite', store=>store.put(value, key));
+  const del = (key)=> withStore('readwrite', store=>store.delete(key));
+  const clear = ()=> withStore('readwrite', store=>store.clear());
+  const keys = ()=> withStore('readonly', store=>{
+    return new Promise((resolve, reject)=>{
+      const out=[];
+      const req = store.openKeyCursor();
+      req.onsuccess = ()=>{
+        const cursor=req.result;
+        if(!cursor){ resolve(out); return; }
+        out.push(cursor.key);
+        cursor.continue();
+      };
+      req.onerror = ()=> reject(req.error);
+    });
+  });
+  const update = (key, updater)=> get(key).then(value=>Promise.resolve(updater(value)).then(newValue=>set(key, newValue)));
+  window.idbKeyval = { get, set, del, clear, keys, update };
+}
+</script>
+
 <script>
 const PUBLISH_CFG = {
   owner: '',
@@ -274,6 +369,106 @@ const DEFAULT_RANGES = [
   { min: 15001, max: 30000, color: '#FFFF00' },
   { min: 30001, max: 50000, color: '#90EE90' },
   { min: 50001, max: 80000, color: '#228B22' }
+  owner:  "",
+  repo:   "",
+  branch: "main", // note: branch names are case-sensitive in API calls
+  token:  ""
+};
+// If you want to override at runtime without editing the file, you can set localStorage:
+// localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"...",repo:"...",branch:"...",token:"..."}));
+const savedCfg = JSON.parse(localStorage.getItem("autoPublishCfg")||"null");
+if(savedCfg){ Object.assign(PUBLISH_CFG, savedCfg); }
+
+/* =========================
+   1) Tabs
+   ========================= */
+const tabs = document.querySelectorAll('nav button');
+const sections = { upload: document.getElementById('tab-upload'), map: document.getElementById('tab-map'), table: document.getElementById('tab-table') };
+tabs.forEach(b=> b.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); b.classList.add('active'); for(const [k,el] of Object.entries(sections)) el.hidden=(b.dataset.tab!==k); if(b.dataset.tab==='map') ensureMap(); if(b.dataset.tab==='table') renderTable(); });
+
+/* =========================
+   2) Storage & helpers
+   ========================= */
+const { set:dbSet, get:dbGet } = idbKeyval;
+const DB = { BILLING:'billing-local', ZCTA:'zcta-local', RANGES:'ranges' };
+const fmtUSD = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+const nowISO = () => new Date().toISOString();
+const toBase64 = str => {
+  const utf8 = new TextEncoder().encode(str);
+  let binary = '';
+  const chunk = 0x8000;
+  for(let i=0;i<utf8.length;i+=chunk){
+    const sub = utf8.subarray(i, i+chunk);
+    binary += String.fromCharCode.apply(null, sub);
+  }
+  return btoa(binary);
+};
+const detectColumn = (rows, patterns) => {
+  const regex = new RegExp(patterns.map(p=>`(${p})`).join('|'), 'i');
+  for(const row of rows){
+    for(const key of Object.keys(row||{})){
+      if(!key) continue;
+      if(regex.test(key)) return key;
+    }
+  }
+  return null;
+};
+const coerceAmount = val => {
+  if(val==null) return NaN;
+  if(typeof val === 'number') return val;
+  const str = String(val).replace(/[^0-9.\-]/g,'');
+  if(!str) return NaN;
+  return Number(str);
+};
+
+function showPublishBanner(){
+  const warn = document.getElementById('pub-warning');
+  const badge = document.getElementById('publish-badge');
+  if(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token){
+    warn.style.display = 'none';
+    document.getElementById('live-badge').innerHTML = '<span class="chip">Auto-publish: <b class="ok">ON</b></span>';
+    badge.style.display='inline-flex';
+    badge.innerHTML='Auto-publish <b class="ok">ON</b>';
+  } else {
+    warn.style.display = 'block';
+    warn.innerHTML = `Auto-publish is <b>OFF</b>. Set <span class="kbd">PUBLISH_CFG</span> (owner/repo/branch/token) or via:
+    <br><span class="kbd">localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"you",repo:"repo",branch:"main",token:"ghp_xxx"}))</span>`;
+    document.getElementById('live-badge').textContent = '';
+    badge.style.display='inline-flex';
+    badge.innerHTML='Auto-publish <b style="color:#ff7676">OFF</b>';
+  }
+}
+showPublishBanner();
+
+const statusLogEl = document.getElementById('status-log');
+let lastStatusMessage = '';
+function logStatus(message, { error=false } = {}){
+  if(!statusLogEl) return;
+  const key = `${error?'ERR:':'OK:'}${message}`;
+  if(key === lastStatusMessage) return;
+  lastStatusMessage = key;
+  const ts = new Date().toLocaleTimeString();
+  const line = document.createElement('div');
+  const stamp = document.createElement('b');
+  stamp.textContent = `[${ts}]`;
+  const span = document.createElement('span');
+  span.textContent = ` ${message}`;
+  if(error) span.classList.add('err');
+  line.appendChild(stamp);
+  line.appendChild(span);
+  statusLogEl.prepend(line);
+  while(statusLogEl.children.length>60){ statusLogEl.removeChild(statusLogEl.lastChild); }
+}
+
+/* =========================
+   3) Color ranges
+   ========================= */
+const DEFAULT_RANGES=[
+  {min:2001,max:5000,color:'#FF0000'},
+  {min:5001,max:15000,color:'#FFC0CB'},
+  {min:15001,max:30000,color:'#FFFF00'},
+  {min:30001,max:50000,color:'#90EE90'},
+  {min:50001,max:80000,color:'#228B22'},
 ];
 const DEFAULT_ELSE = '#1E90FF';
 const DB_KEYS = {
@@ -400,6 +595,124 @@ const App = (() => {
     addElseRow(state.ranges.else || DEFAULT_ELSE);
     chipRanges.textContent = 'ranges.json (saved)';
   }
+(async function initRanges(){
+  let r=await dbGet(DB.RANGES);
+  if(!r){ r={ranges:DEFAULT_RANGES, else:ELSE_COLOR}; await dbSet(DB.RANGES, r); }
+  rangesDiv.innerHTML=''; (r.ranges||DEFAULT_RANGES).forEach(addRangeRow); addElseRow(r.else||ELSE_COLOR);
+  await refreshLocalStatus();
+})();
+function addRangeRow({min,max,color}){
+  const row=document.createElement('div'); row.className='range-row';
+  row.innerHTML=`<input type="number" value="${min}"/><input type="number" value="${max}"/><input type="color" value="${color}"/><button class="btn">Remove</button>`;
+  row.querySelector('button').onclick=()=>row.remove();
+  rangesDiv.appendChild(row);
+}
+function addElseRow(col){
+  const row=document.createElement('div'); row.className='range-row'; row.dataset.else='true';
+  row.innerHTML=`<div class="tiny muted">Else color</div><div></div><input type="color" value="${col}"/><span class="note">used when value not in any range; ≤2000 transparent</span>`;
+  rangesDiv.appendChild(row);
+}
+async function saveRanges(){
+  const rows=[...rangesDiv.querySelectorAll('.range-row')];
+  const out=[]; let elseCol=ELSE_COLOR;
+  for(const r of rows){
+    if(r.dataset.else){ elseCol=r.querySelector('input[type=color]').value; continue; }
+    const [a,b]=r.querySelectorAll('input[type=number]'); const c=r.querySelector('input[type=color]').value;
+    out.push({min:Number(a.value), max:Number(b.value), color:c});
+  }
+  const cfg = {ranges:out, else:elseCol};
+  await dbSet(DB.RANGES, cfg);
+  await refreshLocalStatus();
+  // auto-publish ranges too
+  autoPublish({ ranges: cfg });
+}
+
+/* =========================
+   4) Uploads — BILLING (multi)
+   ========================= */
+const billingInput=document.getElementById('billing-files');
+const billingStatus=document.getElementById('billing-status');
+
+billingInput.onchange = async (e)=>{
+  const files=[...e.target.files];
+  if(!files.length) return;
+  const totals=new Map();
+  let scanned=0, skipped=0;
+  for(const f of files){
+    const buf=await f.arrayBuffer();
+    let rows=[];
+    if(/\.(csv)$/i.test(f.name)){
+      const text=new TextDecoder().decode(buf);
+      rows=csvToRows(text);
+    }else{
+      const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{defval:'', raw:false});
+    }
+    if(!rows.length) continue;
+    const zipKey = detectColumn(rows, ['zip','postal','zcta','geoid']);
+    const amtKey = detectColumn(rows, ['amount','revenue','billed','charge','total']);
+    if(!zipKey || !amtKey){
+      console.warn('Unable to detect ZIP or Amount columns in', f.name);
+      continue;
+    }
+    for(const r of rows){
+      scanned++;
+      const raw = (r[zipKey] ?? '').toString();
+      const m=raw.match(/(\d{5})/);
+      if(!m){ skipped++; continue; }
+      const zip=m[1];
+      const amt=coerceAmount(r[amtKey]);
+      if(!isFinite(amt)){ skipped++; continue; }
+      totals.set(zip, (totals.get(zip)||0)+amt);
+    }
+    const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
+    await dbSet(DB.BILLING, list);
+    await refreshLocalStatus();
+    billingStatus.textContent =
+      `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
+    logStatus(`Billing totals saved (${list.length} ZIP rows).`);
+    // auto-publish
+    autoPublish({ billing: list });
+    maybeAutoMap();
+  }finally{
+    billingInput.value='';
+    billingInput.disabled = false;
+  }
+  const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
+  await dbSet(DB.BILLING, list);
+  await refreshLocalStatus();
+  billingStatus.textContent =
+    `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
+  billingInput.value='';
+  // auto-publish
+  autoPublish({ billing: list });
+};
+function csvToRows(text){
+  const cleaned = text.replace(/^\uFEFF/, '');
+  const lines=cleaned.split(/\r?\n/).filter(ln=>ln.trim().length);
+  if(!lines.length) return [];
+  const head=splitCSV(lines.shift()).map(h=>h.trim());
+  return lines.map(ln=>{
+    const cols=splitCSV(ln);
+    const o={}; head.forEach((h,i)=>{ if(h) o[h]=cols[i]??''; });
+    return o;
+  });
+}
+function splitCSV(line){
+  const out=[]; let cur=''; let inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='"'){
+      if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
+      else { inQ=!inQ; }
+      continue;
+    }
+    if(ch===',' && !inQ){ out.push(cur.trim()); cur=''; continue; }
+    cur+=ch;
+  }
+  out.push(cur.trim());
+  return out;
+}
 
   function addRangeRow(range) {
     const row = document.createElement('div');
@@ -498,6 +811,55 @@ const App = (() => {
     if (value <= 2000) return 'transparent';
     return state.ranges.else || DEFAULT_ELSE;
   }
+zctaInput.onchange = async (e)=>{
+  const files=[...e.target.files];
+  if(!files.length) return;
+  zctaInput.disabled = true;
+  try{
+    const fcList=[];
+    for(const f of files){
+      try{
+        if(/\.zip$/i.test(f.name)){
+          const buf=await f.arrayBuffer();
+          const fc=await shp(buf);
+          if(!fc){
+            logStatus(`Zip ${f.name} did not contain a readable shapefile.`, {error:true});
+            continue;
+          }
+          fcList.push(fc);
+        }else{
+          const text=await f.text();
+          try{
+            const fc=JSON.parse(text);
+            fcList.push(fc);
+          }catch(jsonErr){
+            logStatus(`Failed to parse ${f.name} as GeoJSON.`, {error:true});
+          }
+        }
+      }catch(err){
+        console.error(err);
+        logStatus(`Failed to parse ${f.name}: ${err.message||err}`, {error:true});
+      }
+    }
+  }
+
+  // Merge → FeatureCollection
+  const allFeatures=[];
+  for(const fc of fcList){
+    if(!fc) continue;
+    if(Array.isArray(fc)){
+      allFeatures.push(...fc);
+    }else if(fc.type==='FeatureCollection'){
+      allFeatures.push(...(fc.features||[]));
+    }else if(fc.type==='Feature'){
+      allFeatures.push(fc);
+    }
+  }
+  if(!allFeatures.length){
+    zctaStatus.textContent = 'No valid polygon features found in uploads.';
+    return;
+  }
+  const all = { type:'FeatureCollection', features: allFeatures };
 
   async function drawMap() {
     if (!mapInstance) return;
@@ -645,6 +1007,220 @@ const App = (() => {
         if (header) row[header] = values[idx] ?? '';
       });
       return row;
+    // Merge → FeatureCollection
+    const allFeatures=[];
+    for(const fc of fcList){
+      if(!fc) continue;
+      if(Array.isArray(fc)){
+        allFeatures.push(...fc);
+      }else if(fc.type==='FeatureCollection'){
+        allFeatures.push(...(fc.features||[]));
+      }else if(fc.type==='Feature'){
+        allFeatures.push(fc);
+      }
+    }
+    const valid = allFeatures.filter(f=>f && f.geometry && /(Polygon|MultiPolygon)/.test(f.geometry.type||''));
+    if(!valid.length){
+      zctaStatus.textContent = 'No valid polygon features found in uploads.';
+      logStatus('No polygon features detected — ensure the ZIP/ZCTA shapefile is selected.', {error:true});
+      return;
+    }
+    const all = { type:'FeatureCollection', features: valid };
+
+    // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
+    const bbox = [-96.3, 28.8, -94.9, 30.3];
+    let clipped;
+    try{
+      clipped = turf.bboxClip(all, bbox);
+    }catch(err){
+      console.error(err);
+      logStatus(`Failed to clip shapefile to Houston bbox: ${err.message||err}`, {error:true});
+      clipped = all;
+    }
+
+  await dbSet(DB.ZCTA, simplified);
+  await refreshLocalStatus();
+  zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
+  zctaInput.value='';
+  // auto-publish
+  autoPublish({ zcta: simplified });
+};
+
+async function refreshLocalStatus(){
+  const [billing,zcta,ranges] = await Promise.all([
+    dbGet(DB.BILLING),
+    dbGet(DB.ZCTA),
+    dbGet(DB.RANGES)
+  ]);
+  if(billing && billing.length){
+    billingStatus.textContent = `Loaded ${billing.length} ZIP rows from storage.`;
+    document.getElementById('chip-bill').textContent = `billing.json (${billing.length} ZIPs)`;
+  } else {
+    billingStatus.textContent = 'No billing data in storage.';
+    document.getElementById('chip-bill').textContent = 'billing.json (missing)';
+  }
+  if(zcta && zcta.features){
+    zctaStatus.textContent = `Loaded ${zcta.features.length} ZIP features from storage.`;
+    document.getElementById('chip-zcta').textContent = `houston_zctas.geojson (${zcta.features.length})`;
+  } else {
+    zctaStatus.textContent = 'No shapes in storage.';
+    document.getElementById('chip-zcta').textContent = 'houston_zctas.geojson (missing)';
+  }
+  if(ranges){
+    document.getElementById('chip-ranges').textContent = 'ranges.json (saved)';
+  } else {
+    document.getElementById('chip-ranges').textContent = 'ranges.json (missing)';
+  }
+}
+
+/* =========================
+   6) Map & Table
+   ========================= */
+let map, geoLayer, labelLayer;
+document.getElementById('refresh-map').onclick = ()=> drawChoropleth();
+document.getElementById('toggle-labels').onchange = ()=>{
+  if(!labelLayer) return;
+  const checked=document.getElementById('toggle-labels').checked;
+  if(checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
+};
+function ensureMap(){
+  if(!map){
+    map = L.map('map', { zoomControl:true, preferCanvas:true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
+  }
+  drawChoropleth();
+}
+function centroid(geom){
+  if(!geom) return null;
+  try{
+    const feature = {type:'Feature', geometry:geom, properties:{}};
+    const pt = turf.centerOfMass(feature);
+    if(pt && pt.geometry && Array.isArray(pt.geometry.coordinates)){
+      return pt.geometry.coordinates;
+    }
+  }catch(err){ /* fall back below */ }
+  const polys = geom.type==='Polygon' ? [geom.coordinates] : geom.type==='MultiPolygon' ? geom.coordinates : null;
+  if(!polys || !polys.length) return null;
+  const ring = polys[0][0]; if(!ring || !ring.length) return null;
+  let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
+  return [x/ring.length, y/ring.length];
+}
+function pickColor(v, ranges, elseColor){
+  for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
+  if(v<=2000) return 'transparent';
+  return elseColor||'#1E90FF';
+}
+async function getRanges(){
+  let r=await dbGet(DB.RANGES);
+  if(!r) r={ranges:DEFAULT_RANGES, else:ELSE_COLOR};
+  return r;
+}
+async function drawChoropleth(){
+  const billing = await dbGet(DB.BILLING) || [];
+  const zctas = await dbGet(DB.ZCTA);
+  if(!billing.length || !zctas){
+    logStatus('Map refresh skipped — billing or shapes missing.', {error:true});
+    alert('Please upload & process billing and shapes first.');
+    return;
+  }
+  const cfg = await getRanges();
+  const ranges = cfg.ranges || []; const elseColor = cfg.else;
+
+  const revByZip = new Map(billing.map(r=>[r.zip, r.revenue]));
+
+  if(geoLayer) map.removeLayer(geoLayer);
+  if(labelLayer) map.removeLayer(labelLayer);
+  labelLayer=L.layerGroup();
+  const placedLabels=[];
+
+  geoLayer = L.geoJSON(zctas, {
+    style: f=>{
+      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || f.properties.GEOID10 || '').toString().padStart(5,'0');
+      const v = revByZip.get(zip) || 0;
+      const col = pickColor(v, ranges, elseColor);
+      return { color:'#555', weight:0.4, fillColor:col, fillOpacity: col==='transparent'? 0.06 : 0.85 };
+    },
+    onEachFeature:(f,layer)=>{
+      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || '').toString().padStart(5,'0');
+      const v = revByZip.get(zip) || 0;
+      layer.bindTooltip(`ZIP ${zip}<br>$${fmtUSD(v)}`, {sticky:true});
+      const c = centroid(f.geometry);
+      if(c){
+        const latlng = L.latLng(c[1], c[0]);
+        if(!placedLabels.some(p=>p.distanceTo(latlng)<2500)){
+          placedLabels.push(latlng);
+          const divIcon = L.divIcon({ className:'zip-label', html:`<div>${zip}</div>` });
+          const marker = L.marker([c[1], c[0]], { icon: divIcon, interactive:false });
+          marker.addTo(labelLayer);
+        }
+      }
+    }
+  }).addTo(map);
+  if(document.getElementById('toggle-labels').checked) labelLayer.addTo(map);
+  try{ map.fitBounds(geoLayer.getBounds(), {padding:[20,20]}); }catch(e){}
+}
+async function renderTable(){
+  const billing = await dbGet(DB.BILLING) || [];
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = billing.map(r=>`<tr><td>${r.zip}</td><td>$${fmtUSD(r.revenue)}</td></tr>`).join('');
+}
+async function maybeAutoMap(){
+  const [billing,zcta] = await Promise.all([dbGet(DB.BILLING), dbGet(DB.ZCTA)]);
+  if(billing && billing.length && zcta && !document.getElementById('tab-map').hidden){
+    drawChoropleth();
+  }
+}
+document.getElementById('download-json').onclick = async ()=>{
+  const billing = await dbGet(DB.BILLING) || [];
+  const blob = new Blob([JSON.stringify(billing,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'billing.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+
+/* =========================
+   7) Auto-publish (no prompts)
+   ========================= */
+async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
+  if(!(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token)){
+    document.getElementById('pub-status').textContent = 'Auto-publish skipped (no repo config).';
+    logStatus('Auto-publish skipped — missing repository configuration.', {error:true});
+    showPublishBanner();
+    return;
+  }
+  if(!billing) billing = await dbGet(DB.BILLING) || [];
+  if(!zcta)    zcta    = await dbGet(DB.ZCTA);
+  if(!ranges)  ranges  = await dbGet(DB.RANGES);
+
+  const pub = document.getElementById('pub-status');
+  if(!billing.length || !zcta || !ranges){
+    pub.textContent = 'Waiting for complete data (billing + shapes + ranges)…';
+    logStatus('Auto-publish waiting for complete data (billing + shapes + ranges).');
+    return;
+  }
+
+  const zSimple = turf.simplify(zcta, {tolerance:0.0012, highQuality:false});
+
+  const payloads = [
+    { path:'data/billing.json',         content: JSON.stringify(billing) },
+    { path:'data/houston_zctas.geojson',content: JSON.stringify(zSimple) },
+    { path:'data/ranges.json',          content: JSON.stringify(ranges)  },
+  ];
+
+  const apiBase = `https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/`;
+  async function putFile(p){
+    let sha=null;
+    const head = await fetch(apiBase+p.path+`?ref=${PUBLISH_CFG.branch}`, {
+      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}` }
+    });
+    if(head.ok){ const j=await head.json(); sha=j.sha; }
+    const res = await fetch(apiBase+p.path, {
+      method:'PUT',
+      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        message: `auto: update ${p.path} ${nowISO()}`,
+        content: toBase64(p.content),
+        branch: PUBLISH_CFG.branch,
+        sha
+      })
     });
   }
 
@@ -686,6 +1262,16 @@ const App = (() => {
       }
     }
     return null;
+  try{
+    pub.textContent = 'Publishing updated data…';
+    logStatus('Publishing data to GitHub…');
+    for(const p of payloads) { await putFile(p); }
+    pub.textContent = 'Published ✔ — refresh your Pages site to see updates.';
+    logStatus('Auto-publish complete.');
+  }catch(e){
+    console.error(e);
+    pub.textContent = 'Publish error. Check token (contents: write) and branch name.';
+    logStatus(`Publish error: ${e.message||e}`, {error:true});
   }
 
   function toNumber(value) {
@@ -1000,6 +1586,14 @@ const App = (() => {
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);
+/* =========================
+   8) Init (try publishing if data already present)
+   ========================= */
+document.addEventListener('DOMContentLoaded', async ()=>{
+  await refreshLocalStatus();
+  // If user already uploaded earlier in this browser, publish right away
+  autoPublish();
+});
 </script>
 </body>
 </html>
