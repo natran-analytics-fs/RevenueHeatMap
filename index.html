@@ -348,51 +348,34 @@ const billingStatus=document.getElementById('billing-status');
 billingInput.onchange = async (e)=>{
   const files=[...e.target.files];
   if(!files.length) return;
-  billingInput.disabled = true;
-  try{
-    const totals=new Map();
-    let scanned=0, skipped=0;
-    for(const f of files){
-      try{
-        const buf=await f.arrayBuffer();
-        let rows=[];
-        if(/\.(csv)$/i.test(f.name)){
-          const text=new TextDecoder().decode(buf);
-          rows=csvToRows(text);
-        }else{
-          const wb=XLSX.read(buf,{type:'array'});
-          const ws=wb.Sheets[wb.SheetNames[0]];
-          if(!ws){
-            logStatus(`No worksheets found in ${f.name}.`, {error:true});
-            continue;
-          }
-          rows=XLSX.utils.sheet_to_json(ws,{defval:'', raw:false});
-        }
-        if(!rows.length){
-          logStatus(`No rows detected in ${f.name}.`, {error:true});
-          continue;
-        }
-        const zipKey = detectColumn(rows, ['zip','postal','zcta','geoid']);
-        const amtKey = detectColumn(rows, ['amount','revenue','billed','charge','total']);
-        if(!zipKey || !amtKey){
-          logStatus(`Could not find ZIP/Amount columns in ${f.name}.`, {error:true});
-          continue;
-        }
-        for(const r of rows){
-          scanned++;
-          const raw = (r[zipKey] ?? '').toString();
-          const m=raw.match(/(\d{5})/);
-          if(!m){ skipped++; continue; }
-          const zip=m[1];
-          const amt=coerceAmount(r[amtKey]);
-          if(!isFinite(amt)){ skipped++; continue; }
-          totals.set(zip, (totals.get(zip)||0)+amt);
-        }
-        logStatus(`Processed ${f.name} (${rows.length} rows).`);
-      }catch(err){
-        console.error(err);
-        logStatus(`Failed to process ${f.name}: ${err.message||err}`, {error:true});
-      }
+  const totals=new Map();
+  let scanned=0, skipped=0;
+  for(const f of files){
+    const buf=await f.arrayBuffer();
+    let rows=[];
+    if(/\.(csv)$/i.test(f.name)){
+      const text=new TextDecoder().decode(buf);
+      rows=csvToRows(text);
+    }else{
+      const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{defval:'', raw:false});
+    }
+    if(!rows.length) continue;
+    const zipKey = detectColumn(rows, ['zip','postal','zcta','geoid']);
+    const amtKey = detectColumn(rows, ['amount','revenue','billed','charge','total']);
+    if(!zipKey || !amtKey){
+      console.warn('Unable to detect ZIP or Amount columns in', f.name);
+      continue;
+    }
+    for(const r of rows){
+      scanned++;
+      const raw = (r[zipKey] ?? '').toString();
+      const m=raw.match(/(\d{5})/);
+      if(!m){ skipped++; continue; }
+      const zip=m[1];
+      const amt=coerceAmount(r[amtKey]);
+      if(!isFinite(amt)){ skipped++; continue; }
+      totals.set(zip, (totals.get(zip)||0)+amt);
     }
     const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
     await dbSet(DB.BILLING, list);
@@ -407,6 +390,14 @@ billingInput.onchange = async (e)=>{
     billingInput.value='';
     billingInput.disabled = false;
   }
+  const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
+  await dbSet(DB.BILLING, list);
+  await refreshLocalStatus();
+  billingStatus.textContent =
+    `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
+  billingInput.value='';
+  // auto-publish
+  autoPublish({ billing: list });
 };
 function csvToRows(text){
   const cleaned = text.replace(/^\uFEFF/, '');
@@ -471,6 +462,29 @@ zctaInput.onchange = async (e)=>{
         logStatus(`Failed to parse ${f.name}: ${err.message||err}`, {error:true});
       }
     }
+  }
+
+  // Merge → FeatureCollection
+  const allFeatures=[];
+  for(const fc of fcList){
+    if(!fc) continue;
+    if(Array.isArray(fc)){
+      allFeatures.push(...fc);
+    }else if(fc.type==='FeatureCollection'){
+      allFeatures.push(...(fc.features||[]));
+    }else if(fc.type==='Feature'){
+      allFeatures.push(fc);
+    }
+  }
+  if(!allFeatures.length){
+    zctaStatus.textContent = 'No valid polygon features found in uploads.';
+    return;
+  }
+  const all = { type:'FeatureCollection', features: allFeatures };
+
+  // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
+  const bbox = [-96.3, 28.8, -94.9, 30.3];
+  const clipped = turf.bboxClip(all, bbox);
 
     // Merge → FeatureCollection
     const allFeatures=[];
@@ -503,27 +517,12 @@ zctaInput.onchange = async (e)=>{
       clipped = all;
     }
 
-    // Normalize & simplify
-    clipped.features = (clipped.features||[]).map(f=>{
-      const p=Object.assign({}, f.properties);
-      if(!p) f.properties={};
-      const maybeZip = p.ZCTA5CE10 || p.ZCTA5CE20 || p.GEOID10 || p.GEOID || p.zip || p.ZIPCODE || p.ZIP || '';
-      f.properties = Object.assign({}, p, { ZCTA5CE10: (maybeZip||'').toString().slice(0,10) });
-      return f;
-    }).filter(f=>f.geometry);
-    const simplified = turf.simplify(clipped, {tolerance:0.0012, highQuality:false, mutate:false});
-
-    await dbSet(DB.ZCTA, simplified);
-    await refreshLocalStatus();
-    zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
-    logStatus(`Shapefile stored (${simplified.features.length} features).`);
-    // auto-publish
-    autoPublish({ zcta: simplified });
-    maybeAutoMap();
-  }finally{
-    zctaInput.value='';
-    zctaInput.disabled = false;
-  }
+  await dbSet(DB.ZCTA, simplified);
+  await refreshLocalStatus();
+  zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
+  zctaInput.value='';
+  // auto-publish
+  autoPublish({ zcta: simplified });
 };
 
 async function refreshLocalStatus(){
