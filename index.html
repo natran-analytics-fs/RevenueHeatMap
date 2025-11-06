@@ -1,1584 +1,857 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Houston Revenue by ZIP — Static Heatmap</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<style>
-  :root {
-    --bg: #060912;
-    --panel: #0d1424;
-    --panel-border: #18243d;
-    --text: #f0f5ff;
-    --muted: #8f9bb3;
-    --accent: #63a0ff;
-    --chip: #141f35;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: "Inter", system-ui, -apple-system, Segoe UI, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-  }
-  header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--panel-border);
-    background: #0a1020;
-  }
-  header h1 {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-  }
-  nav {
-    margin-left: auto;
-    display: flex;
-    gap: 8px;
-  }
-  nav button {
-    background: var(--chip);
-    color: var(--text);
-    border: 1px solid #253552;
-    border-radius: 999px;
-    padding: 8px 14px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-  nav button.active {
-    background: var(--accent);
-    color: #081021;
-    border-color: transparent;
-  }
-  main { padding: 20px; }
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--panel-border);
-    border-radius: 14px;
-    padding: 16px;
-    margin-bottom: 18px;
-  }
-  .row { display: flex; gap: 20px; flex-wrap: wrap; }
-  .col { flex: 1 1 320px; }
-  input[type="file"] { display: block; margin-top: 10px; }
-  .tiny { font-size: 12px; }
-  .muted { color: var(--muted); }
-  .kbd {
-    font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
-    font-size: 12px;
-    padding: 2px 6px;
-    border-radius: 6px;
-    background: #111a2c;
-    border: 1px solid #1f2c48;
-    display: inline-block;
-  }
-  .chip {
-    background: var(--chip);
-    color: var(--text);
-    border: 1px solid #22324f;
-    border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .btn {
-    background: #131e33;
-    color: var(--text);
-    border: 1px solid #2b3f62;
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 14px;
-    cursor: pointer;
-  }
-  .btn.tiny { padding: 6px 10px; font-size: 12px; }
-  .btn.accent { background: var(--accent); color: #07122c; border-color: transparent; }
-  #map { height: 65vh; border-radius: 12px; border: 1px solid #1f2d4d; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { padding: 8px 12px; border-bottom: 1px solid #1a2642; white-space: nowrap; }
-  th { text-align: left; background: #121c33; position: sticky; top: 0; z-index: 1; }
-  .status-log { max-height: 160px; overflow-y: auto; background: #111a30; border-radius: 12px; border: 1px solid #1c2b49; padding: 10px; font-size: 12px; line-height: 1.5; }
-  .status-log .err { color: #ff8f8f; }
-  .status-log .ok { color: #6de6a5; }
-  .range-row { display: grid; grid-template-columns: 110px 110px 120px auto; gap: 10px; align-items: center; margin-bottom: 8px; }
-  .range-row[data-else="true"] { grid-template-columns: 120px auto 120px; }
-  .range-row input[type="number"] { background: #111a2d; border: 1px solid #1f2e4a; border-radius: 8px; padding: 6px 8px; color: var(--text); }
-  .range-row input[type="color"] { width: 48px; height: 32px; border: none; border-radius: 8px; }
-  .warn { background: rgba(102, 25, 25, 0.22); border: 1px solid rgba(255, 97, 97, 0.55); border-radius: 12px; padding: 12px 14px; color: #ffaaaa; }
-  .zip-label div { padding: 2px 4px; background: rgba(255,255,255,0.85); color: #091126; border-radius: 6px; font-weight: 600; box-shadow: 0 0 6px rgba(0,0,0,0.45); }
-  :root{--bg:#0b0f19;--panel:#131a2a;--muted:#99a3b3;--text:#e8eefc;--accent:#6aa6ff;--chip:#1b2438}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
-  header{display:flex;gap:12px;align-items:center;padding:14px 18px;background:#0f1524;border-bottom:1px solid #1d2740}
-  header h1{font-size:18px;margin:0;font-weight:600}
-  nav{margin-left:auto;display:flex;gap:8px}
-  nav button{background:var(--chip);color:var(--text);border:1px solid #2a3654;padding:8px 12px;border-radius:10px;cursor:pointer}
-  nav button.active{background:var(--accent);color:#0a0f1c;border-color:transparent}
-  main{padding:18px}
-  .panel{background:var(--panel);border:1px solid #1d2740;border-radius:14px;padding:14px;margin-bottom:16px}
-  .row{display:flex;gap:14px;flex-wrap:wrap}
-  .col{flex:1 1 320px}
-  .muted{color:var(--muted)}
-  .chip{background:var(--chip);padding:6px 10px;border-radius:999px;border:1px solid #263252;font-size:12px;margin-right:6px}
-  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:2px 6px; background:#121a2c; border:1px solid #1f2945; border-radius:6px}
-  .btn{background:#16213a;color:var(--text);border:1px solid #29406d;padding:8px 10px;border-radius:10px;cursor:pointer}
-  .btn.accent{background:var(--accent);color:#0b0f19;border-color:transparent}
-  .note{font-size:12px;color:#a9b5ca}
-  .tiny{font-size:12px}
-  input[type="file"]{display:block;margin-top:8px}
-  #map{height:64vh;border-radius:12px;border:1px solid #223055}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{padding:8px 10px;border-bottom:1px solid #1f2945;white-space:nowrap}
-  th{position:sticky;top:0;background:#121a2c;text-align:left}
-  .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
-  .warn{background:#291a1a;border:1px solid #623e3e;color:#ffbdbd;padding:8px 10px;border-radius:10px}
-  .status-log{margin-top:10px;font-size:12px;line-height:1.5;max-height:120px;overflow:auto;padding:10px;border-radius:10px;background:#12192b;border:1px solid #1f2945}
-  .status-log b{color:#6aa6ff}
-  .status-log .err{color:#ff8686}
-  .ok{color:#4caf50}
-  .zip-label div{padding:2px 4px;border-radius:6px;background:rgba(255,255,255,0.7);color:#0a1020;font-weight:600;box-shadow:0 0 6px rgba(0,0,0,0.35)}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Houston ZIP Revenue Heatmap</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --border: #475569;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .app-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1em;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+
+        .status-on {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .status-off {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--warning);
+            border: 1px solid var(--warning);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: var(--bg-secondary);
+            padding: 8px;
+            border-radius: 12px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 14px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .tab:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .tab-content {
+            display: none;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .upload-section {
+            margin-bottom: 32px;
+        }
+
+        .section-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .upload-area {
+            background: var(--bg-tertiary);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 16px;
+            opacity: 0.6;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 4px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        #map {
+            height: 600px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .map-controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            transition: background 0.3s;
+            cursor: pointer;
+        }
+
+        .toggle-switch.active {
+            background: var(--accent);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 3px;
+            left: 3px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            transform: translateX(24px);
+        }
+
+        .color-ranges {
+            background: var(--bg-tertiary);
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .range-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 100px 40px;
+            gap: 12px;
+            margin-bottom: 12px;
+            align-items: center;
+        }
+
+        .range-input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+
+        .range-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .color-input {
+            width: 100%;
+            height: 40px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .delete-btn {
+            background: var(--error);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: all 0.3s;
+        }
+
+        .delete-btn:hover {
+            background: #dc2626;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        tr:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .status-log {
+            background: var(--bg-tertiary);
+            padding: 20px;
+            border-radius: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .log-success {
+            color: var(--success);
+        }
+
+        .log-error {
+            color: var(--error);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid var(--accent);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .leaflet-popup-tip {
+            background: var(--bg-secondary);
+        }
+    </style>
 </head>
 <body>
-<header>
-  <h1>Houston Revenue by ZIP</h1>
-  <div id="publish-badge" class="chip" style="display:none"></div>
-  <nav>
-    <button data-tab="upload" class="active">Data Upload / Status</button>
-    <button data-tab="map">Map</button>
-    <button data-tab="table">Table</button>
-  </nav>
-</header>
+    <div class="app-container">
+        <header>
+            <h1>🗺️ Houston ZIP Revenue Heatmap</h1>
+            <p class="subtitle">Client-side revenue visualization with auto-publish to GitHub</p>
+            <span class="status-badge" id="publishStatus">Checking...</span>
+        </header>
 
-<main>
-  <section id="tab-upload" class="tab">
-    <div id="publish-warning" class="warn" style="display:none"></div>
-
-    <div class="panel">
-      <h3>Upload and process data entirely in the browser</h3>
-      <div class="row">
-        <div class="col">
-          <h4>Billing totals (.csv, .xls, .xlsx)</h4>
-          <p class="tiny muted">Multiple files welcome. ZIP and revenue columns are auto-detected. Data stays local and aggregates per ZIP.</p>
-          <input id="billing-input" type="file" accept=".csv,.xls,.xlsx" multiple />
-          <div id="billing-status" class="tiny muted">No billing data loaded.</div>
+        <div class="tabs">
+            <button class="tab active" data-tab="upload">📤 Data Upload</button>
+            <button class="tab" data-tab="map">🗺️ Map View</button>
+            <button class="tab" data-tab="table">📊 Table View</button>
         </div>
-        <div class="col">
-          <h4>ZIP boundaries (.zip shapefile or .geojson)</h4>
-          <p class="tiny muted">Upload Houston-area ZCTA boundaries (multiple files supported). Files are merged, clipped, simplified, and cached.</p>
-          <input id="shape-input" type="file" accept=".zip,.geojson,.json" multiple />
-          <div id="shape-status" class="tiny muted">No ZIP boundaries loaded.</div>
+
+        <div class="tab-content active" id="upload-tab">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Billing Records</div>
+                    <div class="stat-value" id="billingCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">ZIP Codes</div>
+                    <div class="stat-value" id="zipCount">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-value" id="totalRevenue">$0</div>
+                </div>
+            </div>
+
+            <div class="upload-section">
+                <h2 class="section-title">📊 Billing Data</h2>
+                <div class="upload-area" id="billingUpload">
+                    <div class="upload-icon">📄</div>
+                    <p><strong>Drop billing files here</strong> or click to browse</p>
+                    <p style="color: var(--text-muted); margin-top: 8px;">Supports: CSV, XLS, XLSX</p>
+                    <input type="file" id="billingFiles" accept=".csv,.xls,.xlsx" multiple>
+                </div>
+            </div>
+
+            <div class="upload-section">
+                <h2 class="section-title">🗺️ ZIP Code Shapes</h2>
+                <div class="upload-area" id="zipUpload">
+                    <div class="upload-icon">📦</div>
+                    <p><strong>Drop ZIP shape files here</strong> or click to browse</p>
+                    <p style="color: var(--text-muted); margin-top: 8px;">Supports: ZIP (shapefile), GeoJSON</p>
+                    <input type="file" id="zipFiles" accept=".zip,.geojson" multiple>
+                </div>
+            </div>
+
+            <div class="section-title" style="margin-top: 32px;">📋 Status Log</div>
+            <div class="status-log" id="statusLog">
+                <div class="log-entry">Ready to process files...</div>
+            </div>
         </div>
-      </div>
-      <p class="tiny muted">Processed outputs are stored in IndexedDB and auto-published to <span class="kbd">data/billing.json</span>, <span class="kbd">data/houston_zctas.geojson</span>, and <span class="kbd">data/ranges.json</span> when GitHub access is configured.</p>
+
+        <div class="tab-content" id="map-tab">
+            <div class="map-controls">
+                <label class="toggle-label">
+                    <span>Show ZIP Labels</span>
+                    <div class="toggle-switch" id="labelToggle"></div>
+                </label>
+            </div>
+
+            <div class="color-ranges">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 class="section-title" style="margin: 0;">🎨 Color Ranges</h3>
+                    <button class="btn btn-primary" id="addRange">+ Add Range</button>
+                </div>
+                <div id="rangesList"></div>
+                <div class="range-row">
+                    <span style="grid-column: 1 / 3; color: var(--text-muted);">Else (unmatched values)</span>
+                    <input type="color" class="color-input" id="elseColor" value="#6b7280">
+                </div>
+            </div>
+
+            <div id="map"></div>
+        </div>
+
+        <div class="tab-content" id="table-tab">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 class="section-title" style="margin: 0;">Revenue by ZIP Code</h2>
+                <button class="btn btn-primary" id="downloadBtn">⬇️ Download JSON</button>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>ZIP Code</th>
+                            <th>Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <tr><td colspan="2" style="text-align: center; color: var(--text-muted);">No data loaded</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
-    <div class="panel">
-      <h3>Color range editor</h3>
-      <div id="ranges"></div>
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <button id="add-range" class="btn">Add range</button>
-        <button id="reset-ranges" class="btn">Reset defaults</button>
-        <button id="save-ranges" class="btn accent">Save ranges</button>
-        <span class="tiny muted">Ranges are evaluated from top to bottom. Values ≤ 2000 render transparent. Else color catches unmatched ZIPs.</span>
-      </div>
-    </div>
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/4.0.4/shp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/umd.js"></script>
 
-    <div class="panel">
-      <h3>Status & diagnostics</h3>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <span class="chip" id="chip-billing">billing.json</span>
-        <span class="chip" id="chip-shapes">houston_zctas.geojson</span>
-        <span class="chip" id="chip-ranges">ranges.json</span>
-      </div>
-      <div id="publish-status" class="tiny muted" style="margin-top:8px;">Waiting for complete datasets…</div>
-      <div class="tiny muted" id="pub-status" style="margin-top:8px">Awaiting uploads…</div>
-      <div id="status-log" class="status-log"></div>
-    </div>
-  </section>
-
-  <section id="tab-map" class="tab" hidden>
-    <div class="panel" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-      <span class="tiny muted">Base map: OpenStreetMap · Choropleth from billing totals</span>
-      <label class="tiny" style="display:flex; gap:6px; align-items:center;">
-        <input type="checkbox" id="toggle-labels" checked />
-        Show ZIP labels
-      </label>
-      <button id="refresh-map" class="btn">Refresh map</button>
-      <span id="live-state" class="tiny muted"></span>
-    </div>
-    <div id="map"></div>
-  </section>
-
-  <section id="tab-table" class="tab" hidden>
-    <div class="panel" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-      <span class="tiny muted">ZIP → revenue totals from processed billing data.</span>
-      <button id="download-billing" class="btn">Download billing.json</button>
-    </div>
-    <div style="border:1px solid #1f2d4d; border-radius:12px; overflow:auto; max-height:70vh;">
-      <table>
-        <thead><tr><th>ZIP</th><th>Revenue</th></tr></thead>
-        <tbody id="billing-table"></tbody>
-      </table>
-    </div>
-  </section>
-</main>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
-<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-<script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval-iife.js"></script>
-<script>
-// Ensure idb-keyval fallback when CDN is blocked
-if (!window.idbKeyval) {
-  const DB_NAME = 'idb-keyval';
-  const STORE_NAME = 'keyval';
-  const openDatabase = () => new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-        request.result.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-  });
-  const withStore = (mode, fn) => openDatabase().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, mode);
-    const store = tx.objectStore(STORE_NAME);
-    let request;
-    try {
-      request = fn(store);
-    } catch (err) {
-      tx.abort();
-      db.close();
-      reject(err);
-      return;
-    }
-    const finish = () => { db.close(); resolve(request?.result); };
-    if (request && typeof request.then === 'function') {
-      request.then(value => { db.close(); resolve(value); }).catch(reject);
-    } else {
-      tx.oncomplete = finish;
-      tx.onabort = tx.onerror = () => { db.close(); reject(tx.error || new Error('IDB transaction failed')); };
-    }
-  }));
-  const get = key => withStore('readonly', store => store.get(key));
-  const set = (key, value) => withStore('readwrite', store => store.put(value, key));
-  const del = key => withStore('readwrite', store => store.delete(key));
-  const clear = () => withStore('readwrite', store => store.clear());
-  const keys = () => withStore('readonly', store => {
-    return new Promise((resolve, reject) => {
-      const list = [];
-      const req = store.openKeyCursor();
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (!cursor) { resolve(list); return; }
-        list.push(cursor.key);
-        cursor.continue();
-      };
-      req.onerror = () => reject(req.error);
-    });
-  });
-  window.idbKeyval = { get, set, del, clear, keys };
-}
-</script>
-<script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval.iife.js"></script>
-<script>
-// Fallback for idb-keyval when CDN is unavailable (e.g. network blocks). This mirrors
-// the tiny API surface we use (get/set/del/clear/keys/update) so the rest of the app
-// continues to function client-side even if the CDN fails to load. Based on idb-keyval@6.
-if(!window.idbKeyval){
-  const DB_NAME = 'idb-keyval';
-  const STORE_NAME = 'keyval';
-  const openDatabase = () => new Promise((resolve, reject)=>{
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = ()=>{
-      if(!request.result.objectStoreNames.contains(STORE_NAME)){
-        request.result.createObjectStore(STORE_NAME);
-      }
-    };
-    request.onerror = ()=> reject(request.error);
-    request.onsuccess = ()=> resolve(request.result);
-  });
-  const withStore = (mode, handler) => openDatabase().then(db=>new Promise((resolve, reject)=>{
-    const tx = db.transaction(STORE_NAME, mode);
-    const store = tx.objectStore(STORE_NAME);
-    let request;
-    let handledByPromise = false;
-    try {
-      request = handler(store);
-    } catch(err) {
-      reject(err);
-      tx.abort();
-      db.close();
-      return;
-    }
-    if(request && typeof request.then === 'function'){
-      handledByPromise = true;
-      request.then(value=>resolve(value)).catch(err=>{
-        tx.abort();
-        reject(err);
-      });
-    }
-    tx.oncomplete = ()=>{ db.close(); if(!handledByPromise) resolve(request?.result); };
-    tx.onabort = tx.onerror = ()=>{ const err = tx.error || new Error('IDB transaction aborted'); db.close(); reject(err); };
-  }));
-  const get = (key)=> withStore('readonly', store=>store.get(key));
-  const set = (key, value)=> withStore('readwrite', store=>store.put(value, key));
-  const del = (key)=> withStore('readwrite', store=>store.delete(key));
-  const clear = ()=> withStore('readwrite', store=>store.clear());
-  const keys = ()=> withStore('readonly', store=>{
-    return new Promise((resolve, reject)=>{
-      const out=[];
-      const req = store.openKeyCursor();
-      req.onsuccess = ()=>{
-        const cursor=req.result;
-        if(!cursor){ resolve(out); return; }
-        out.push(cursor.key);
-        cursor.continue();
-      };
-      req.onerror = ()=> reject(req.error);
-    });
-  });
-  const update = (key, updater)=> get(key).then(value=>Promise.resolve(updater(value)).then(newValue=>set(key, newValue)));
-  window.idbKeyval = { get, set, del, clear, keys, update };
-}
-</script>
-
-<script>
-const PUBLISH_CFG = {
-  owner: '',
-  repo: '',
-  branch: 'main',
-  token: ''
-};
-const savedCfg = JSON.parse(localStorage.getItem('autoPublishCfg') || 'null');
-if (savedCfg) Object.assign(PUBLISH_CFG, savedCfg);
-
-const DEFAULT_RANGES = [
-  { min: 2001, max: 5000, color: '#FF0000' },
-  { min: 5001, max: 15000, color: '#FFC0CB' },
-  { min: 15001, max: 30000, color: '#FFFF00' },
-  { min: 30001, max: 50000, color: '#90EE90' },
-  { min: 50001, max: 80000, color: '#228B22' }
-  owner:  "",
-  repo:   "",
-  branch: "main", // note: branch names are case-sensitive in API calls
-  token:  ""
-};
-// If you want to override at runtime without editing the file, you can set localStorage:
-// localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"...",repo:"...",branch:"...",token:"..."}));
-const savedCfg = JSON.parse(localStorage.getItem("autoPublishCfg")||"null");
-if(savedCfg){ Object.assign(PUBLISH_CFG, savedCfg); }
-
-/* =========================
-   1) Tabs
-   ========================= */
-const tabs = document.querySelectorAll('nav button');
-const sections = { upload: document.getElementById('tab-upload'), map: document.getElementById('tab-map'), table: document.getElementById('tab-table') };
-tabs.forEach(b=> b.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); b.classList.add('active'); for(const [k,el] of Object.entries(sections)) el.hidden=(b.dataset.tab!==k); if(b.dataset.tab==='map') ensureMap(); if(b.dataset.tab==='table') renderTable(); });
-
-/* =========================
-   2) Storage & helpers
-   ========================= */
-const { set:dbSet, get:dbGet } = idbKeyval;
-const DB = { BILLING:'billing-local', ZCTA:'zcta-local', RANGES:'ranges' };
-const fmtUSD = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
-const nowISO = () => new Date().toISOString();
-const toBase64 = str => {
-  const utf8 = new TextEncoder().encode(str);
-  let binary = '';
-  const chunk = 0x8000;
-  for(let i=0;i<utf8.length;i+=chunk){
-    const sub = utf8.subarray(i, i+chunk);
-    binary += String.fromCharCode.apply(null, sub);
-  }
-  return btoa(binary);
-};
-const detectColumn = (rows, patterns) => {
-  const regex = new RegExp(patterns.map(p=>`(${p})`).join('|'), 'i');
-  for(const row of rows){
-    for(const key of Object.keys(row||{})){
-      if(!key) continue;
-      if(regex.test(key)) return key;
-    }
-  }
-  return null;
-};
-const coerceAmount = val => {
-  if(val==null) return NaN;
-  if(typeof val === 'number') return val;
-  const str = String(val).replace(/[^0-9.\-]/g,'');
-  if(!str) return NaN;
-  return Number(str);
-};
-
-function showPublishBanner(){
-  const warn = document.getElementById('pub-warning');
-  const badge = document.getElementById('publish-badge');
-  if(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token){
-    warn.style.display = 'none';
-    document.getElementById('live-badge').innerHTML = '<span class="chip">Auto-publish: <b class="ok">ON</b></span>';
-    badge.style.display='inline-flex';
-    badge.innerHTML='Auto-publish <b class="ok">ON</b>';
-  } else {
-    warn.style.display = 'block';
-    warn.innerHTML = `Auto-publish is <b>OFF</b>. Set <span class="kbd">PUBLISH_CFG</span> (owner/repo/branch/token) or via:
-    <br><span class="kbd">localStorage.setItem("autoPublishCfg", JSON.stringify({owner:"you",repo:"repo",branch:"main",token:"ghp_xxx"}))</span>`;
-    document.getElementById('live-badge').textContent = '';
-    badge.style.display='inline-flex';
-    badge.innerHTML='Auto-publish <b style="color:#ff7676">OFF</b>';
-  }
-}
-showPublishBanner();
-
-const statusLogEl = document.getElementById('status-log');
-let lastStatusMessage = '';
-function logStatus(message, { error=false } = {}){
-  if(!statusLogEl) return;
-  const key = `${error?'ERR:':'OK:'}${message}`;
-  if(key === lastStatusMessage) return;
-  lastStatusMessage = key;
-  const ts = new Date().toLocaleTimeString();
-  const line = document.createElement('div');
-  const stamp = document.createElement('b');
-  stamp.textContent = `[${ts}]`;
-  const span = document.createElement('span');
-  span.textContent = ` ${message}`;
-  if(error) span.classList.add('err');
-  line.appendChild(stamp);
-  line.appendChild(span);
-  statusLogEl.prepend(line);
-  while(statusLogEl.children.length>60){ statusLogEl.removeChild(statusLogEl.lastChild); }
-}
-
-/* =========================
-   3) Color ranges
-   ========================= */
-const DEFAULT_RANGES=[
-  {min:2001,max:5000,color:'#FF0000'},
-  {min:5001,max:15000,color:'#FFC0CB'},
-  {min:15001,max:30000,color:'#FFFF00'},
-  {min:30001,max:50000,color:'#90EE90'},
-  {min:50001,max:80000,color:'#228B22'},
-];
-const DEFAULT_ELSE = '#1E90FF';
-const DB_KEYS = {
-  BILLING: 'billing-data',
-  SHAPES: 'houston-zcta',
-  RANGES: 'color-ranges'
-};
-const HOUSTON_BBOX = [-96.3, 28.8, -94.9, 30.3];
-
-const App = (() => {
-  const state = {
-    billing: [],
-    shapes: null,
-    ranges: { ranges: DEFAULT_RANGES.slice(), else: DEFAULT_ELSE }
-  };
-
-  const statusLog = document.getElementById('status-log');
-  const publishStatusEl = document.getElementById('publish-status');
-  const publishBadge = document.getElementById('publish-badge');
-  const publishWarning = document.getElementById('publish-warning');
-  const liveState = document.getElementById('live-state');
-  const chipBilling = document.getElementById('chip-billing');
-  const chipShapes = document.getElementById('chip-shapes');
-  const chipRanges = document.getElementById('chip-ranges');
-  const billingStatus = document.getElementById('billing-status');
-  const shapeStatus = document.getElementById('shape-status');
-  const tableBody = document.getElementById('billing-table');
-  const rangesContainer = document.getElementById('ranges');
-
-  let mapInstance = null;
-  let polygonsLayer = null;
-  let labelLayer = null;
-  let publishTimer = null;
-  let publishInFlight = false;
-  let pendingPublishReason = null;
-
-  const db = window.idbKeyval;
-
-  function log(message, type = 'info') {
-    if (!statusLog) return;
-    const entry = document.createElement('div');
-    const ts = new Date().toLocaleTimeString();
-    entry.innerHTML = `<b>[${ts}]</b> <span class="${type === 'error' ? 'err' : 'ok'}">${message}</span>`;
-    statusLog.prepend(entry);
-    while (statusLog.children.length > 120) {
-      statusLog.removeChild(statusLog.lastChild);
-    }
-    console[type === 'error' ? 'error' : 'log'](message);
-  }
-
-  function fmtUSD(value) {
-    return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-
-  function updatePublishIndicators() {
-    const configured = PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token;
-    if (configured) {
-      publishBadge.style.display = 'inline-flex';
-      publishBadge.innerHTML = 'Auto-publish <span class="ok">ON</span>';
-      publishWarning.style.display = 'none';
-      liveState.textContent = 'Auto-publish ready';
-    } else {
-      publishBadge.style.display = 'inline-flex';
-      publishBadge.innerHTML = '<span style="color:#ff8484;">Auto-publish OFF</span>';
-      publishWarning.style.display = 'block';
-      publishWarning.innerHTML = 'Configure <span class="kbd">PUBLISH_CFG</span> (owner/repo/branch/token) or set <span class="kbd">localStorage.autoPublishCfg</span> for automatic GitHub commits.';
-      liveState.textContent = 'Auto-publish disabled';
-    }
-  }
-
-  async function loadFromStorage() {
-    const [billing, shapes, ranges] = await Promise.all([
-      db.get(DB_KEYS.BILLING),
-      db.get(DB_KEYS.SHAPES),
-      db.get(DB_KEYS.RANGES)
-    ]);
-    if (Array.isArray(billing)) {
-      state.billing = billing;
-    }
-    if (shapes && shapes.type === 'FeatureCollection') {
-      state.shapes = shapes;
-    }
-    if (ranges && Array.isArray(ranges.ranges)) {
-      state.ranges = ranges;
-    } else {
-      state.ranges = { ranges: DEFAULT_RANGES.slice(), else: DEFAULT_ELSE };
-      await db.set(DB_KEYS.RANGES, state.ranges);
-    }
-    renderBillingStatus();
-    renderShapeStatus();
-    renderRangeEditor();
-    renderTable();
-    if (state.billing.length && state.shapes && !document.getElementById('tab-map').hidden) {
-      ensureMap();
-      drawMap();
-    }
-    schedulePublish('initial-load');
-  }
-
-  function renderBillingStatus() {
-    if (state.billing.length) {
-      billingStatus.textContent = `Loaded ${state.billing.length} ZIP rows from storage.`;
-      chipBilling.textContent = `billing.json (${state.billing.length} ZIPs)`;
-    } else {
-      billingStatus.textContent = 'No billing data loaded.';
-      chipBilling.textContent = 'billing.json (missing)';
-    }
-  }
-
-  function renderShapeStatus() {
-    if (state.shapes && state.shapes.features) {
-      shapeStatus.textContent = `Loaded ${state.shapes.features.length} ZIP polygons from storage.`;
-      chipShapes.textContent = `houston_zctas.geojson (${state.shapes.features.length})`;
-    } else {
-      shapeStatus.textContent = 'No ZIP boundaries loaded.';
-      chipShapes.textContent = 'houston_zctas.geojson (missing)';
-    }
-  }
-
-  function renderRangeEditor() {
-    rangesContainer.innerHTML = '';
-    const ranges = state.ranges.ranges || [];
-    ranges.forEach(range => addRangeRow(range));
-    addElseRow(state.ranges.else || DEFAULT_ELSE);
-    chipRanges.textContent = 'ranges.json (saved)';
-  }
-(async function initRanges(){
-  let r=await dbGet(DB.RANGES);
-  if(!r){ r={ranges:DEFAULT_RANGES, else:ELSE_COLOR}; await dbSet(DB.RANGES, r); }
-  rangesDiv.innerHTML=''; (r.ranges||DEFAULT_RANGES).forEach(addRangeRow); addElseRow(r.else||ELSE_COLOR);
-  await refreshLocalStatus();
-})();
-function addRangeRow({min,max,color}){
-  const row=document.createElement('div'); row.className='range-row';
-  row.innerHTML=`<input type="number" value="${min}"/><input type="number" value="${max}"/><input type="color" value="${color}"/><button class="btn">Remove</button>`;
-  row.querySelector('button').onclick=()=>row.remove();
-  rangesDiv.appendChild(row);
-}
-function addElseRow(col){
-  const row=document.createElement('div'); row.className='range-row'; row.dataset.else='true';
-  row.innerHTML=`<div class="tiny muted">Else color</div><div></div><input type="color" value="${col}"/><span class="note">used when value not in any range; ≤2000 transparent</span>`;
-  rangesDiv.appendChild(row);
-}
-async function saveRanges(){
-  const rows=[...rangesDiv.querySelectorAll('.range-row')];
-  const out=[]; let elseCol=ELSE_COLOR;
-  for(const r of rows){
-    if(r.dataset.else){ elseCol=r.querySelector('input[type=color]').value; continue; }
-    const [a,b]=r.querySelectorAll('input[type=number]'); const c=r.querySelector('input[type=color]').value;
-    out.push({min:Number(a.value), max:Number(b.value), color:c});
-  }
-  const cfg = {ranges:out, else:elseCol};
-  await dbSet(DB.RANGES, cfg);
-  await refreshLocalStatus();
-  // auto-publish ranges too
-  autoPublish({ ranges: cfg });
-}
-
-/* =========================
-   4) Uploads — BILLING (multi)
-   ========================= */
-const billingInput=document.getElementById('billing-files');
-const billingStatus=document.getElementById('billing-status');
-
-billingInput.onchange = async (e)=>{
-  const files=[...e.target.files];
-  if(!files.length) return;
-  const totals=new Map();
-  let scanned=0, skipped=0;
-  for(const f of files){
-    const buf=await f.arrayBuffer();
-    let rows=[];
-    if(/\.(csv)$/i.test(f.name)){
-      const text=new TextDecoder().decode(buf);
-      rows=csvToRows(text);
-    }else{
-      const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
-      rows=XLSX.utils.sheet_to_json(ws,{defval:'', raw:false});
-    }
-    if(!rows.length) continue;
-    const zipKey = detectColumn(rows, ['zip','postal','zcta','geoid']);
-    const amtKey = detectColumn(rows, ['amount','revenue','billed','charge','total']);
-    if(!zipKey || !amtKey){
-      console.warn('Unable to detect ZIP or Amount columns in', f.name);
-      continue;
-    }
-    for(const r of rows){
-      scanned++;
-      const raw = (r[zipKey] ?? '').toString();
-      const m=raw.match(/(\d{5})/);
-      if(!m){ skipped++; continue; }
-      const zip=m[1];
-      const amt=coerceAmount(r[amtKey]);
-      if(!isFinite(amt)){ skipped++; continue; }
-      totals.set(zip, (totals.get(zip)||0)+amt);
-    }
-    const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
-    await dbSet(DB.BILLING, list);
-    await refreshLocalStatus();
-    billingStatus.textContent =
-      `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
-    logStatus(`Billing totals saved (${list.length} ZIP rows).`);
-    // auto-publish
-    autoPublish({ billing: list });
-    maybeAutoMap();
-  }finally{
-    billingInput.value='';
-    billingInput.disabled = false;
-  }
-  const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
-  await dbSet(DB.BILLING, list);
-  await refreshLocalStatus();
-  billingStatus.textContent =
-    `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
-  billingInput.value='';
-  // auto-publish
-  autoPublish({ billing: list });
-};
-function csvToRows(text){
-  const cleaned = text.replace(/^\uFEFF/, '');
-  const lines=cleaned.split(/\r?\n/).filter(ln=>ln.trim().length);
-  if(!lines.length) return [];
-  const head=splitCSV(lines.shift()).map(h=>h.trim());
-  return lines.map(ln=>{
-    const cols=splitCSV(ln);
-    const o={}; head.forEach((h,i)=>{ if(h) o[h]=cols[i]??''; });
-    return o;
-  });
-}
-function splitCSV(line){
-  const out=[]; let cur=''; let inQ=false;
-  for(let i=0;i<line.length;i++){
-    const ch=line[i];
-    if(ch==='"'){
-      if(inQ && line[i+1]==='"'){ cur+='"'; i++; }
-      else { inQ=!inQ; }
-      continue;
-    }
-    if(ch===',' && !inQ){ out.push(cur.trim()); cur=''; continue; }
-    cur+=ch;
-  }
-  out.push(cur.trim());
-  return out;
-}
-
-  function addRangeRow(range) {
-    const row = document.createElement('div');
-    row.className = 'range-row';
-    row.innerHTML = `
-      <input type="number" class="range-min" value="${range.min}" />
-      <input type="number" class="range-max" value="${range.max}" />
-      <input type="color" class="range-color" value="${range.color}" />
-      <button class="btn tiny">Remove</button>
-    `;
-    row.querySelector('button').onclick = () => {
-      row.remove();
-    };
-    rangesContainer.appendChild(row);
-  }
-
-  function addElseRow(color) {
-    const row = document.createElement('div');
-    row.className = 'range-row';
-    row.dataset.else = 'true';
-    row.innerHTML = `
-      <span class="tiny muted">Else color</span>
-      <span class="tiny muted">Used when no range matches</span>
-      <input type="color" class="range-else" value="${color}" />
-    `;
-    rangesContainer.appendChild(row);
-  }
-
-  function collectRangesFromUI() {
-    const rows = [...rangesContainer.querySelectorAll('.range-row')];
-    const ranges = [];
-    let elseColor = DEFAULT_ELSE;
-    rows.forEach(row => {
-      if (row.dataset.else) {
-        const c = row.querySelector('.range-else').value;
-        elseColor = c || DEFAULT_ELSE;
-      } else {
-        const min = Number(row.querySelector('.range-min').value);
-        const max = Number(row.querySelector('.range-max').value);
-        const color = row.querySelector('.range-color').value || '#cccccc';
-        ranges.push({ min, max, color });
-      }
-    });
-    ranges.sort((a, b) => a.min - b.min);
-    return { ranges, else: elseColor };
-  }
-
-  function ensureMap() {
-    if (!mapInstance) {
-      mapInstance = L.map('map', { preferCanvas: true });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-      }).addTo(mapInstance);
-    }
-  }
-
-  function getZip(properties) {
-    const keys = ['ZCTA5CE10', 'ZCTA5CE20', 'GEOID10', 'GEOID', 'zip', 'ZIP', 'ZIPCODE'];
-    for (const key of keys) {
-      if (properties && properties[key] !== undefined && properties[key] !== null) {
-        const value = String(properties[key]).match(/\d{5}/);
-        if (value) return value[0];
-      }
-    }
-    return null;
-  }
-
-  function centroidOf(feature) {
-    try {
-      const center = turf.centerOfMass(feature);
-      if (center && center.geometry) {
-        return center.geometry.coordinates;
-      }
-    } catch (err) {
-      // fall through to manual centroid
-    }
-    try {
-      const coords = feature.geometry.type === 'Polygon'
-        ? feature.geometry.coordinates[0]
-        : feature.geometry.coordinates[0][0];
-      let x = 0, y = 0;
-      coords.forEach(pair => { x += pair[0]; y += pair[1]; });
-      return [x / coords.length, y / coords.length];
-    } catch (err) {
-      return null;
-    }
-  }
-
-  function pickColor(value) {
-    const ranges = state.ranges.ranges || [];
-    for (const range of ranges) {
-      if (value >= range.min && value <= range.max) {
-        return range.color;
-      }
-    }
-    if (value <= 2000) return 'transparent';
-    return state.ranges.else || DEFAULT_ELSE;
-  }
-zctaInput.onchange = async (e)=>{
-  const files=[...e.target.files];
-  if(!files.length) return;
-  zctaInput.disabled = true;
-  try{
-    const fcList=[];
-    for(const f of files){
-      try{
-        if(/\.zip$/i.test(f.name)){
-          const buf=await f.arrayBuffer();
-          const fc=await shp(buf);
-          if(!fc){
-            logStatus(`Zip ${f.name} did not contain a readable shapefile.`, {error:true});
-            continue;
-          }
-          fcList.push(fc);
-        }else{
-          const text=await f.text();
-          try{
-            const fc=JSON.parse(text);
-            fcList.push(fc);
-          }catch(jsonErr){
-            logStatus(`Failed to parse ${f.name} as GeoJSON.`, {error:true});
-          }
-        }
-      }catch(err){
-        console.error(err);
-        logStatus(`Failed to parse ${f.name}: ${err.message||err}`, {error:true});
-      }
-    }
-
-  async function drawMap() {
-    if (!mapInstance) return;
-    if (!state.billing.length || !state.shapes) {
-      liveState.textContent = 'Upload billing and shapes to see the map.';
-      return;
-    }
-    const revLookup = new Map(state.billing.map(row => [row.zip, row.revenue]));
-    if (polygonsLayer) {
-      polygonsLayer.remove();
-    }
-    if (labelLayer) {
-      labelLayer.remove();
-    }
-    labelLayer = L.layerGroup();
-    const placed = [];
-
-    polygonsLayer = L.geoJSON(state.shapes, {
-      style: feature => {
-        const zip = getZip(feature.properties) || '';
-        const revenue = revLookup.get(zip) || 0;
-        const color = pickColor(revenue);
-        return {
-          color: '#303c54',
-          weight: 0.6,
-          fillOpacity: color === 'transparent' ? 0.08 : 0.82,
-          fillColor: color
+    <script>
+        // ============= CONFIGURATION =============
+        const PUBLISH_CFG = {
+            owner: '',        // e.g., 'yourusername'
+            repo: '',         // e.g., 'houston-revenue'
+            branch: 'main',
+            token: ''         // GitHub Personal Access Token
         };
-      },
-      onEachFeature: (feature, layer) => {
-        const zip = getZip(feature.properties) || 'Unknown';
-        const revenue = revLookup.get(zip) || 0;
-        layer.bindTooltip(`ZIP ${zip}<br>$${fmtUSD(revenue)}`, { sticky: true });
-        const center = centroidOf(feature);
-        if (center) {
-          const latlng = L.latLng(center[1], center[0]);
-          const overlaps = placed.some(existing => existing.distanceTo(latlng) < 2200);
-          if (!overlaps) {
-            placed.push(latlng);
-            labelLayer.addLayer(L.marker([center[1], center[0]], {
-              icon: L.divIcon({ className: 'zip-label', html: `<div>${zip}</div>` }),
-              interactive: false
-            }));
-          }
+
+        const HOUSTON_BBOX = [-95.9, 29.5, -95.0, 30.2];
+
+        const DEFAULT_RANGES = [
+            { min: 0, max: 10000, color: '#fef3c7' },
+            { min: 10000, max: 50000, color: '#fcd34d' },
+            { min: 50000, max: 100000, color: '#f59e0b' },
+            { min: 100000, max: 500000, color: '#ea580c' },
+            { min: 500000, max: Infinity, color: '#dc2626' }
+        ];
+
+        // ============= STATE =============
+        let billingData = {};
+        let zipShapes = null;
+        let colorRanges = [...DEFAULT_RANGES];
+        let elseColor = '#6b7280';
+        let map = null;
+        let geoJsonLayer = null;
+        let labelLayer = null;
+        let labelsVisible = false;
+
+        // ============= STORAGE =============
+        const store = window.idbKeyval || {
+            get: async (key) => localStorage.getItem(key) ? JSON.parse(localStorage.getItem(key)) : null,
+            set: async (key, val) => localStorage.setItem(key, JSON.stringify(val)),
+            del: async (key) => localStorage.removeItem(key)
+        };
+
+        // ============= LOGGING =============
+        function log(msg, type = 'info') {
+            const logEl = document.getElementById('statusLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type === 'error' ? 'log-error' : type === 'success' ? 'log-success' : ''}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${msg}`;
+            logEl.insertBefore(entry, logEl.firstChild);
         }
-      }
-    }).addTo(mapInstance);
 
-    if (document.getElementById('toggle-labels').checked) {
-      labelLayer.addTo(mapInstance);
-    }
+        // ============= UI INITIALIZATION =============
+        function initUI() {
+            // Check publish config
+            const hasConfig = PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.token;
+            const badge = document.getElementById('publishStatus');
+            if (hasConfig) {
+                badge.className = 'status-badge status-on';
+                badge.textContent = '✅ Auto-publish ON';
+            } else {
+                badge.className = 'status-badge status-off';
+                badge.textContent = '⚠️ Auto-publish OFF';
+            }
 
-    try {
-      mapInstance.fitBounds(polygonsLayer.getBounds(), { padding: [20, 20] });
-    } catch (err) {
-      console.warn('Could not fit map bounds:', err);
-    }
+            // Tab switching
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.dataset.tab;
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(`${tabName}-tab`).classList.add('active');
+                    if (tabName === 'map' && map) {
+                        setTimeout(() => map.invalidateSize(), 100);
+                    }
+                });
+            });
 
-    liveState.textContent = `Rendering ${state.shapes.features.length} ZIPs.`;
-  }
+            // Upload areas
+            setupUploadArea('billingUpload', 'billingFiles', handleBillingFiles);
+            setupUploadArea('zipUpload', 'zipFiles', handleZipFiles);
 
-  function renderTable() {
-    const rows = state.billing.slice().sort((a, b) => b.revenue - a.revenue);
-    tableBody.innerHTML = rows.map(row => `<tr><td>${row.zip}</td><td>$${fmtUSD(row.revenue)}</td></tr>`).join('');
-  }
+            // Map controls
+            document.getElementById('labelToggle').addEventListener('click', toggleLabels);
+            document.getElementById('addRange').addEventListener('click', addColorRange);
+            document.getElementById('downloadBtn').addEventListener('click', downloadData);
+            document.getElementById('elseColor').addEventListener('change', (e) => {
+                elseColor = e.target.value;
+                store.set('elseColor', elseColor);
+                updateMap();
+            });
 
-  function debounce(fn, delay = 600) {
-    return (...args) => {
-      clearTimeout(fn._timer);
-      fn._timer = setTimeout(() => fn(...args), delay);
-    };
-  }
-
-  const scheduleTableRender = debounce(renderTable, 80);
-
-  async function parseBillingFiles(files) {
-    const totals = new Map();
-    let scanned = 0;
-    let skipped = 0;
-    for (const file of files) {
-      try {
-        const ext = file.name.split('.').pop().toLowerCase();
-        let rows = [];
-        if (ext === 'csv') {
-          const text = await file.text();
-          rows = parseCsvText(text, file.name);
-        } else {
-          const buffer = await file.arrayBuffer();
-          const workbook = XLSX.read(buffer, { type: 'array' });
-          const sheetName = workbook.SheetNames[0];
-          if (!sheetName) {
-            log(`No worksheets in ${file.name}.`, 'error');
-            continue;
-          }
-          const worksheet = workbook.Sheets[sheetName];
-          rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false });
+            // Load saved data
+            loadSavedData();
+            
+            // Initialize map
+            initMap();
+            
+            // Render color ranges
+            renderColorRanges();
         }
-        if (!rows.length) {
-          log(`No rows detected in ${file.name}.`, 'error');
-          continue;
+
+        function setupUploadArea(areaId, inputId, handler) {
+            const area = document.getElementById(areaId);
+            const input = document.getElementById(inputId);
+
+            area.addEventListener('click', () => input.click());
+            area.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                area.classList.add('dragover');
+            });
+            area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+            area.addEventListener('drop', (e) => {
+                e.preventDefault();
+                area.classList.remove('dragover');
+                handler(e.dataTransfer.files);
+            });
+            input.addEventListener('change', (e) => handler(e.target.files));
         }
-        const zipKey = detectColumn(rows, [/zip/, /postal/, /zcta/, /geoid/]);
-        const amtKey = detectColumn(rows, [/amount/, /revenue/, /billed/, /charge/, /total/]);
-        if (!zipKey || !amtKey) {
-          log(`Missing ZIP or Amount columns in ${file.name}.`, 'error');
-          continue;
+
+        // ============= FILE HANDLING =============
+        async function handleBillingFiles(files) {
+            log(`Processing ${files.length} billing file(s)...`);
+            
+            for (const file of files) {
+                try {
+                    const data = await readFile(file);
+                    const parsed = parseBillingData(data, file.name);
+                    Object.assign(billingData, parsed);
+                    log(`✓ Processed ${file.name}: ${Object.keys(parsed).length} ZIPs`, 'success');
+                } catch (err) {
+                    log(`✗ Error processing ${file.name}: ${err.message}`, 'error');
+                }
+            }
+
+            await store.set('billingData', billingData);
+            updateStats();
+            updateMap();
+            updateTable();
+            await autoPublish('data/billing.json', billingData);
         }
-        rows.forEach(row => {
-          const rawZip = row[zipKey];
-          const match = String(rawZip || '').match(/\d{5}/);
-          if (!match) { skipped++; return; }
-          const zip = match[0];
-          const amount = toNumber(row[amtKey]);
-          if (!isFinite(amount)) { skipped++; return; }
-          totals.set(zip, (totals.get(zip) || 0) + amount);
-          scanned++;
-        });
-        log(`Processed ${file.name} (${rows.length} rows).`);
-      } catch (err) {
-        log(`Failed to parse ${file.name}: ${err.message || err}`, 'error');
-      }
-    }
-    return { totals, scanned, skipped };
-  }
 
-  function parseCsvText(text, name) {
-    if (window.Papa) {
-      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-      if (parsed.errors?.length) {
-        parsed.errors.forEach(err => log(`CSV warning (${name}): ${err.message}`, 'error'));
-      }
-      return parsed.data || [];
-    }
-    return manualCsv(text);
-  }
+        async function handleZipFiles(files) {
+            log(`Processing ${files.length} shape file(s)...`);
+            let allFeatures = [];
 
-  function manualCsv(text) {
-    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
-    if (!lines.length) return [];
-    const headers = splitCsvLine(lines.shift());
-    return lines.map(line => {
-      const values = splitCsvLine(line);
-      const row = {};
-      headers.forEach((header, idx) => {
-        if (header) row[header] = values[idx] ?? '';
-      });
-      return row;
-    // Merge → FeatureCollection
-    const allFeatures=[];
-    for(const fc of fcList){
-      if(!fc) continue;
-      if(Array.isArray(fc)){
-        allFeatures.push(...fc);
-      }else if(fc.type==='FeatureCollection'){
-        allFeatures.push(...(fc.features||[]));
-      }else if(fc.type==='Feature'){
-        allFeatures.push(fc);
-      }
-    }
-    const valid = allFeatures.filter(f=>f && f.geometry && /(Polygon|MultiPolygon)/.test(f.geometry.type||''));
-    if(!valid.length){
-      zctaStatus.textContent = 'No valid polygon features found in uploads.';
-      logStatus('No polygon features detected — ensure the ZIP/ZCTA shapefile is selected.', {error:true});
-      return;
-    }
+            for (const file of files) {
+                try {
+                    const geojson = await parseShapeFile(file);
+                    allFeatures = allFeatures.concat(geojson.features);
+                    log(`✓ Processed ${file.name}: ${geojson.features.length} features`, 'success');
+                } catch (err) {
+                    log(`✗ Error processing ${file.name}: ${err.message}`, 'error');
+                }
+            }
 
-    const all = { type:'FeatureCollection', features: valid };
-    const bbox = [-96.3, 28.8, -94.9, 30.3];
-    let clipped;
-    try{
-      clipped = turf.bboxClip(all, bbox);
-    }catch(err){
-      console.error(err);
-      logStatus(`Failed to clip shapefile to Houston bbox: ${err.message||err}`, {error:true});
-      clipped = all;
-    }
-
-    const simplified = turf.simplify(clipped, { tolerance:0.0009, highQuality:false });
-    await dbSet(DB.ZCTA, simplified);
-    await refreshLocalStatus();
-    zctaStatus.textContent = `Stored ${files.length} file(s) → ${simplified.features.length} features locally.`;
-    logStatus(`Shapes saved (${simplified.features.length} features).`);
-    autoPublish({ zcta: simplified });
-    maybeAutoMap();
-  }finally{
-    zctaInput.value='';
-    zctaInput.disabled = false;
-  }
-};
-
-async function refreshLocalStatus(){
-  const [billing,zcta,ranges] = await Promise.all([
-    dbGet(DB.BILLING),
-    dbGet(DB.ZCTA),
-    dbGet(DB.RANGES)
-  ]);
-  if(billing && billing.length){
-    billingStatus.textContent = `Loaded ${billing.length} ZIP rows from storage.`;
-    document.getElementById('chip-bill').textContent = `billing.json (${billing.length} ZIPs)`;
-  } else {
-    billingStatus.textContent = 'No billing data in storage.';
-    document.getElementById('chip-bill').textContent = 'billing.json (missing)';
-  }
-  if(zcta && zcta.features){
-    zctaStatus.textContent = `Loaded ${zcta.features.length} ZIP features from storage.`;
-    document.getElementById('chip-zcta').textContent = `houston_zctas.geojson (${zcta.features.length})`;
-  } else {
-    zctaStatus.textContent = 'No shapes in storage.';
-    document.getElementById('chip-zcta').textContent = 'houston_zctas.geojson (missing)';
-  }
-  if(ranges){
-    document.getElementById('chip-ranges').textContent = 'ranges.json (saved)';
-  } else {
-    document.getElementById('chip-ranges').textContent = 'ranges.json (missing)';
-  }
-}
-
-/* =========================
-   6) Map & Table
-   ========================= */
-let map, geoLayer, labelLayer;
-document.getElementById('refresh-map').onclick = ()=> drawChoropleth();
-document.getElementById('toggle-labels').onchange = ()=>{
-  if(!labelLayer) return;
-  const checked=document.getElementById('toggle-labels').checked;
-  if(checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
-};
-function ensureMap(){
-  if(!map){
-    map = L.map('map', { zoomControl:true, preferCanvas:true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
-  }
-  drawChoropleth();
-}
-function centroid(geom){
-  if(!geom) return null;
-  try{
-    const feature = {type:'Feature', geometry:geom, properties:{}};
-    const pt = turf.centerOfMass(feature);
-    if(pt && pt.geometry && Array.isArray(pt.geometry.coordinates)){
-      return pt.geometry.coordinates;
-    }
-  }catch(err){ /* fall back below */ }
-  const polys = geom.type==='Polygon' ? [geom.coordinates] : geom.type==='MultiPolygon' ? geom.coordinates : null;
-  if(!polys || !polys.length) return null;
-  const ring = polys[0][0]; if(!ring || !ring.length) return null;
-  let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
-  return [x/ring.length, y/ring.length];
-}
-function pickColor(v, ranges, elseColor){
-  for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
-  if(v<=2000) return 'transparent';
-  return elseColor||'#1E90FF';
-}
-async function getRanges(){
-  let r=await dbGet(DB.RANGES);
-  if(!r) r={ranges:DEFAULT_RANGES, else:ELSE_COLOR};
-  return r;
-}
-async function drawChoropleth(){
-  const billing = await dbGet(DB.BILLING) || [];
-  const zctas = await dbGet(DB.ZCTA);
-  if(!billing.length || !zctas){
-    logStatus('Map refresh skipped — billing or shapes missing.', {error:true});
-    alert('Please upload & process billing and shapes first.');
-    return;
-  }
-  const cfg = await getRanges();
-  const ranges = cfg.ranges || []; const elseColor = cfg.else;
-
-  const revByZip = new Map(billing.map(r=>[r.zip, r.revenue]));
-
-  if(geoLayer) map.removeLayer(geoLayer);
-  if(labelLayer) map.removeLayer(labelLayer);
-  labelLayer=L.layerGroup();
-  const placedLabels=[];
-
-  geoLayer = L.geoJSON(zctas, {
-    style: f=>{
-      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || f.properties.GEOID10 || '').toString().padStart(5,'0');
-      const v = revByZip.get(zip) || 0;
-      const col = pickColor(v, ranges, elseColor);
-      return { color:'#555', weight:0.4, fillColor:col, fillOpacity: col==='transparent'? 0.06 : 0.85 };
-    },
-    onEachFeature:(f,layer)=>{
-      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || '').toString().padStart(5,'0');
-      const v = revByZip.get(zip) || 0;
-      layer.bindTooltip(`ZIP ${zip}<br>$${fmtUSD(v)}`, {sticky:true});
-      const c = centroid(f.geometry);
-      if(c){
-        const latlng = L.latLng(c[1], c[0]);
-        if(!placedLabels.some(p=>p.distanceTo(latlng)<2500)){
-          placedLabels.push(latlng);
-          const divIcon = L.divIcon({ className:'zip-label', html:`<div>${zip}</div>` });
-          const marker = L.marker([c[1], c[0]], { icon: divIcon, interactive:false });
-          marker.addTo(labelLayer);
+            if (allFeatures.length > 0) {
+                zipShapes = processZipShapes(allFeatures);
+                await store.set('zipShapes', zipShapes);
+                updateStats();
+                updateMap();
+                await autoPublish('data/houston_zctas.geojson', zipShapes);
+            }
         }
-      }
-    }
-  }).addTo(map);
-  if(document.getElementById('toggle-labels').checked) labelLayer.addTo(map);
-  try{ map.fitBounds(geoLayer.getBounds(), {padding:[20,20]}); }catch(e){}
-}
-async function renderTable(){
-  const billing = await dbGet(DB.BILLING) || [];
-  const tbody = document.querySelector('#tbl tbody');
-  tbody.innerHTML = billing.map(r=>`<tr><td>${r.zip}</td><td>$${fmtUSD(r.revenue)}</td></tr>`).join('');
-}
-async function maybeAutoMap(){
-  const [billing,zcta] = await Promise.all([dbGet(DB.BILLING), dbGet(DB.ZCTA)]);
-  if(billing && billing.length && zcta && !document.getElementById('tab-map').hidden){
-    drawChoropleth();
-  }
-}
-document.getElementById('download-json').onclick = async ()=>{
-  const billing = await dbGet(DB.BILLING) || [];
-  const blob = new Blob([JSON.stringify(billing,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'billing.json'; a.click(); URL.revokeObjectURL(a.href);
-};
 
-/* =========================
-   7) Auto-publish (no prompts)
-   ========================= */
-async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
-  if(!(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token)){
-    document.getElementById('pub-status').textContent = 'Auto-publish skipped (no repo config).';
-    logStatus('Auto-publish skipped — missing repository configuration.', {error:true});
-    showPublishBanner();
-    return;
-  }
-  if(!billing) billing = await dbGet(DB.BILLING) || [];
-  if(!zcta)    zcta    = await dbGet(DB.ZCTA);
-  if(!ranges)  ranges  = await dbGet(DB.RANGES);
-
-  const pub = document.getElementById('pub-status');
-  if(!billing.length || !zcta || !ranges){
-    pub.textContent = 'Waiting for complete data (billing + shapes + ranges)…';
-    logStatus('Auto-publish waiting for complete data (billing + shapes + ranges).');
-    return;
-  }
-
-  const zSimple = turf.simplify(zcta, {tolerance:0.0012, highQuality:false});
-
-  const payloads = [
-    { path:'data/billing.json',         content: JSON.stringify(billing) },
-    { path:'data/houston_zctas.geojson',content: JSON.stringify(zSimple) },
-    { path:'data/ranges.json',          content: JSON.stringify(ranges)  },
-  ];
-
-  const apiBase = `https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/`;
-  async function putFile(p){
-    let sha=null;
-    const head = await fetch(apiBase+p.path+`?ref=${PUBLISH_CFG.branch}`, {
-      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}` }
-    });
-    if(head.ok){ const j=await head.json(); sha=j.sha; }
-    const res = await fetch(apiBase+p.path, {
-      method:'PUT',
-      headers:{ 'Authorization':`Bearer ${PUBLISH_CFG.token}`, 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        message: `auto: update ${p.path} ${nowISO()}`,
-        content: toBase64(p.content),
-        branch: PUBLISH_CFG.branch,
-        sha
-      })
-    });
-  }
-
-  function splitCsvLine(line) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
+                
+                if (file.name.endsWith('.csv')) {
+                    reader.readAsText(file);
+                } else {
+                    reader.readAsArrayBuffer(file);
+                }
+            });
         }
-        continue;
-      }
-      if (char === ',' && !inQuotes) {
-        values.push(current.trim());
-        current = '';
-        continue;
-      }
-      current += char;
-    }
-    values.push(current.trim());
-    return values;
-  }
 
-  function detectColumn(rows, patterns) {
-    for (const row of rows) {
-      if (!row) continue;
-      for (const key of Object.keys(row)) {
-        if (!key) continue;
-        const normalized = key.toString().toLowerCase();
-        if (patterns.some(pattern => pattern.test(normalized))) {
-          return key;
+        function parseBillingData(data, filename) {
+            const result = {};
+            
+            if (filename.endsWith('.csv')) {
+                const lines = data.split('\n').filter(l => l.trim());
+                if (lines.length < 2) return result;
+                
+                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                const zipCol = headers.findIndex(h => h.includes('zip'));
+                const amtCol = headers.findIndex(h => h.includes('amount') || h.includes('revenue') || h.includes('total'));
+                
+                if (zipCol === -1 || amtCol === -1) {
+                    throw new Error('Could not find ZIP or Amount columns');
+                }
+                
+                for (let i = 1; i < lines.length; i++) {
+                    const cols = lines[i].split(',');
+                    if (cols.length <= Math.max(zipCol, amtCol)) continue;
+                    
+                    const zip = cols[zipCol].trim().replace(/"/g, '');
+                    const amt = parseFloat(cols[amtCol].replace(/[^0-9.-]/g, ''));
+                    
+                    if (zip && !isNaN(amt)) {
+                        result[zip] = (result[zip] || 0) + amt;
+                    }
+                }
+            } else {
+                // Excel file
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(sheet);
+                
+                for (const row of json) {
+                    const keys = Object.keys(row);
+                    const zipKey = keys.find(k => k.toLowerCase().includes('zip'));
+                    const amtKey = keys.find(k => k.toLowerCase().includes('amount') || k.toLowerCase().includes('revenue') || k.toLowerCase().includes('total'));
+                    
+                    if (zipKey && amtKey) {
+                        const zip = String(row[zipKey]).trim();
+                        const amt = parseFloat(String(row[amtKey]).replace(/[^0-9.-]/g, ''));
+                        
+                        if (zip && !isNaN(amt)) {
+                            result[zip] = (result[zip] || 0) + amt;
+                        }
+                    }
+                }
+            }
+            
+            return result;
         }
-      }
-    }
-    return null;
-  try{
-    pub.textContent = 'Publishing updated data…';
-    logStatus('Publishing data to GitHub…');
-    for(const p of payloads) { await putFile(p); }
-    pub.textContent = 'Published ✔ — refresh your Pages site to see updates.';
-    logStatus('Auto-publish complete.');
-  }catch(e){
-    console.error(e);
-    pub.textContent = 'Publish error. Check token (contents: write) and branch name.';
-    logStatus(`Publish error: ${e.message||e}`, {error:true});
-  }
 
-  function toNumber(value) {
-    if (typeof value === 'number') return value;
-    if (value === null || value === undefined) return NaN;
-    const cleaned = String(value).replace(/[^0-9.-]+/g, '');
-    if (!cleaned) return NaN;
-    return Number(cleaned);
-  }
-
-  async function handleBillingUpload(event) {
-    const files = [...event.target.files];
-    if (!files.length) return;
-    event.target.disabled = true;
-    try {
-      log(`Reading ${files.length} billing file(s)…`);
-      const { totals, scanned, skipped } = await parseBillingFiles(files);
-      const rows = [...totals.entries()].map(([zip, revenue]) => ({ zip, revenue })).sort((a, b) => b.revenue - a.revenue);
-      state.billing = rows;
-      await db.set(DB_KEYS.BILLING, rows);
-      billingStatus.textContent = `Processed ${files.length} file(s). Rows scanned: ${scanned}. Skipped: ${skipped}. ZIPs: ${rows.length}.`;
-      chipBilling.textContent = `billing.json (${rows.length} ZIPs)`;
-      log(`Billing totals saved (${rows.length} ZIPs).`);
-      renderTable();
-      schedulePublish('billing-upload');
-      if (state.shapes) {
-        ensureMap();
-        drawMap();
-      }
-    } finally {
-      event.target.value = '';
-      event.target.disabled = false;
-    }
-  }
-
-  async function handleShapeUpload(event) {
-    const files = [...event.target.files];
-    if (!files.length) return;
-    event.target.disabled = true;
-    try {
-      log(`Reading ${files.length} ZIP boundary file(s)…`);
-      const collections = [];
-      for (const file of files) {
-        try {
-          if (/\.zip$/i.test(file.name)) {
-            const buffer = await file.arrayBuffer();
-            const geojson = await shp(buffer);
-            collections.push(geojson);
-          } else {
-            const text = await file.text();
-            const geojson = JSON.parse(text);
-            collections.push(geojson);
-          }
-          log(`Loaded ${file.name}.`);
-        } catch (err) {
-          log(`Failed to parse ${file.name}: ${err.message || err}`, 'error');
+        async function parseShapeFile(file) {
+            if (file.name.endsWith('.geojson')) {
+                const text = await file.text();
+                return JSON.parse(text);
+            } else {
+                // Shapefile ZIP
+                const buffer = await file.arrayBuffer();
+                const geojson = await shp(buffer);
+                return Array.isArray(geojson) ? { type: 'FeatureCollection', features: geojson } : geojson;
+            }
         }
-      }
-      const merged = mergeCollections(collections);
-      if (!merged.features.length) {
-        shapeStatus.textContent = 'No polygon features detected.';
-        log('No polygon features detected in uploads.', 'error');
-        return;
-      }
-      const cleaned = prepareHoustonFeatures(merged);
-      if (!cleaned.features.length) {
-        shapeStatus.textContent = 'No Houston-area ZIP polygons remained after clipping.';
-        log('No Houston-area ZIP polygons remained after clipping.', 'error');
-        return;
-      }
-      state.shapes = cleaned;
-      await db.set(DB_KEYS.SHAPES, cleaned);
-      shapeStatus.textContent = `Stored ${cleaned.features.length} Houston ZIP polygons.`;
-      chipShapes.textContent = `houston_zctas.geojson (${cleaned.features.length})`;
-      log(`Stored ZIP shapes (${cleaned.features.length} features).`);
-      if (mapInstance) {
-        drawMap();
-      }
-      schedulePublish('shape-upload');
-    } finally {
-      event.target.value = '';
-      event.target.disabled = false;
-    }
-  }
 
-  function mergeCollections(list) {
-    const features = [];
-    list.forEach(item => {
-      if (!item) return;
-      if (Array.isArray(item)) {
-        item.forEach(feature => { if (feature?.geometry) features.push(feature); });
-      } else if (item.type === 'FeatureCollection') {
-        (item.features || []).forEach(feature => { if (feature?.geometry) features.push(feature); });
-      } else if (item.type === 'Feature') {
-        if (item.geometry) features.push(item);
-      }
-    });
-    const polygons = features.filter(feature => /Polygon/i.test(feature.geometry?.type || ''));
-    return { type: 'FeatureCollection', features: polygons };
-  }
+        function processZipShapes(features) {
+            const bbox = turf.bboxPolygon(HOUSTON_BBOX);
+            let processed = [];
 
-  function prepareHoustonFeatures(collection) {
-    const filtered = [];
-    for (const feature of collection.features) {
-      try {
-        const bbox = turf.bbox(feature);
-        if (bbox[2] < HOUSTON_BBOX[0] || bbox[0] > HOUSTON_BBOX[2] || bbox[3] < HOUSTON_BBOX[1] || bbox[1] > HOUSTON_BBOX[3]) {
-          continue;
+            for (const feature of features) {
+                try {
+                    // Clip to Houston bbox
+                    const clipped = turf.bboxClip(feature, HOUSTON_BBOX);
+                    
+                    // Simplify geometry
+                    const simplified = turf.simplify(clipped, { tolerance: 0.001 });
+                    
+                    // Normalize properties
+                    const zipCode = feature.properties.ZCTA5CE10 || 
+                                   feature.properties.ZCTA5CE20 || 
+                                   feature.properties.ZIP || 
+                                   feature.properties.ZIPCODE ||
+                                   feature.properties.zip;
+                    
+                    if (zipCode) {
+                        simplified.properties = { ZIP: String(zipCode) };
+                        processed.push(simplified);
+                    }
+                } catch (err) {
+                    console.warn('Error processing feature:', err);
+                }
+            }
+
+            return {
+                type: 'FeatureCollection',
+                features: processed
+            };
         }
-        let clipped = feature;
-        try {
-          clipped = turf.bboxClip(feature, HOUSTON_BBOX);
-        } catch (clipError) {
-          // keep original geometry if clipping fails
+
+        // ============= MAP =============
+        function initMap() {
+            map = L.map('map').setView([29.76, -95.37], 10);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            updateMap();
         }
-        const zip = getZip(clipped.properties || {}) || '';
-        clipped.properties = { ...(clipped.properties || {}), ZCTA5CE10: zip };
-        filtered.push(clipped);
-      } catch (err) {
-        log(`Skipped a feature during cleaning: ${err.message || err}`, 'error');
-      }
-    }
-    const simplified = turf.simplify({ type: 'FeatureCollection', features: filtered }, {
-      tolerance: 0.0015,
-      highQuality: false,
-      mutate: false
-    });
-    return simplified;
-  }
 
-  async function saveRanges() {
-    const ranges = collectRangesFromUI();
-    state.ranges = ranges;
-    await db.set(DB_KEYS.RANGES, ranges);
-    chipRanges.textContent = 'ranges.json (saved)';
-    log('Color ranges saved.');
-    schedulePublish('ranges-update');
-    if (mapInstance) {
-      drawMap();
-    }
-  }
+        function updateMap() {
+            if (!map) return;
 
-  function resetRanges() {
-    state.ranges = { ranges: DEFAULT_RANGES.slice(), else: DEFAULT_ELSE };
-    renderRangeEditor();
-    log('Color ranges reset to defaults.');
-  }
+            // Remove existing layers
+            if (geoJsonLayer) map.removeLayer(geoJsonLayer);
+            if (labelLayer) map.removeLayer(labelLayer);
 
-  function setupTabNavigation() {
-    const tabButtons = document.querySelectorAll('nav button');
-    const sections = {
-      upload: document.getElementById('tab-upload'),
-      map: document.getElementById('tab-map'),
-      table: document.getElementById('tab-table')
-    };
-    tabButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        tabButtons.forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-        Object.entries(sections).forEach(([key, section]) => {
-          section.hidden = button.dataset.tab !== key;
-        });
-        if (button.dataset.tab === 'map') {
-          ensureMap();
-          drawMap();
-          setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 120);
+            if (!zipShapes) return;
+
+            // Add GeoJSON layer
+            geoJsonLayer = L.geoJSON(zipShapes, {
+                style: (feature) => {
+                    const zip = feature.properties.ZIP;
+                    const revenue = billingData[zip] || 0;
+                    const color = getColorForRevenue(revenue);
+                    
+                    return {
+                        fillColor: color,
+                        fillOpacity: 0.7,
+                        color: '#1e293b',
+                        weight: 1
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    const zip = feature.properties.ZIP;
+                    const revenue = billingData[zip] || 0;
+                    layer.bindPopup(`
+                        <strong>ZIP:</strong> ${zip}<br>
+                        <strong>Revenue:</strong> $${revenue.toLocaleString()}
+                    `);
+                }
+            }).addTo(map);
+
+            // Fit bounds
+            map.fitBounds(geoJsonLayer.getBounds());
+
+            // Update labels if visible
+            if (labelsVisible) {
+                showLabels();
+            }
         }
-        if (button.dataset.tab === 'table') {
-          renderTable();
+
+        function getColorForRevenue(revenue) {
+            for (const range of colorRanges) {
+                if (revenue >= range.min && revenue < range.max) {
+                    return range.color;
+                }
+            }
+            return elseColor;
         }
-      });
-    });
-  }
 
-  function schedulePublish(reason) {
-    if (publishInFlight) {
-      pendingPublishReason = reason;
-      log(`Publish queued (${reason}).`);
-      return;
-    }
-    clearTimeout(publishTimer);
-    publishTimer = setTimeout(() => publishAll(reason), 800);
-  }
+        function toggleLabels() {
+            labelsVisible = !labelsVisible;
+            const toggle = document.getElementById('labelToggle');
+            toggle.classList.toggle('active', labelsVisible);
+            
+            if (labelsVisible) {
+                showLabels();
+            } else {
+                if (labelLayer) map.removeLayer(labelLayer);
+            }
+        }
 
-  async function publishAll(reason) {
-    const configured = PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token;
-    if (!configured) {
-      publishStatusEl.textContent = 'Auto-publish disabled (missing repository credentials).';
-      updatePublishIndicators();
-      return;
-    }
-    if (!state.billing.length || !state.shapes || !state.ranges) {
-      publishStatusEl.textContent = 'Waiting for complete data (billing + shapes + ranges)…';
-      return;
-    }
-    publishInFlight = true;
-    publishStatusEl.textContent = `Publishing data (${reason})…`;
-    log('Preparing auto-publish payload…');
+        function showLabels() {
+            if (labelLayer) map.removeLayer(labelLayer);
+            if (!zipShapes) return;
 
-    const simplified = turf.simplify(state.shapes, { tolerance: 0.0012, highQuality: false, mutate: false });
-
-    const payloads = [
-      { path: 'data/billing.json', content: JSON.stringify(state.billing) },
-      { path: 'data/houston_zctas.geojson', content: JSON.stringify(simplified) },
-      { path: 'data/ranges.json', content: JSON.stringify(state.ranges) }
-    ];
-
-    try {
-      for (const payload of payloads) {
-        await putFile(payload);
-      }
-      publishStatusEl.textContent = 'Published ✔ — changes pushed to GitHub.';
-      log('Auto-publish complete.');
-    } catch (err) {
-      publishStatusEl.textContent = 'Publish error. Check token scopes and branch name.';
-      log(`Publish error: ${err.message || err}`, 'error');
-    } finally {
-      publishInFlight = false;
-      if (pendingPublishReason) {
-        const nextReason = pendingPublishReason;
-        pendingPublishReason = null;
-        schedulePublish(nextReason);
-      }
-    }
-  }
-
-  async function putFile({ path, content }) {
-    const base = `https://api.github.com/repos/${PUBLISH_CFG.owner}/${PUBLISH_CFG.repo}/contents/${path}`;
-    let sha = null;
-    const headRes = await fetch(`${base}?ref=${encodeURIComponent(PUBLISH_CFG.branch)}`, {
-      headers: { Authorization: `Bearer ${PUBLISH_CFG.token}` }
-    });
-    if (headRes.ok) {
-      const json = await headRes.json();
-      sha = json.sha;
-    }
-    const body = {
-      message: `auto: update ${path} ${new Date().toISOString()}`,
-      content: toBase64(content),
-      branch: PUBLISH_CFG.branch
-    };
-    if (sha) body.sha = sha;
-    const res = await fetch(base, {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${PUBLISH_CFG.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
-    }
-  }
-
-  function toBase64(str) {
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(str);
-    let binary = '';
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      const segment = bytes.subarray(i, i + chunk);
-      binary += String.fromCharCode.apply(null, segment);
-    }
-    return btoa(binary);
-  }
-
-  function downloadBilling() {
-    const blob = new Blob([JSON.stringify(state.billing, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'billing.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function setupEventHandlers() {
-    document.getElementById('billing-input').addEventListener('change', handleBillingUpload);
-    document.getElementById('shape-input').addEventListener('change', handleShapeUpload);
-    document.getElementById('download-billing').addEventListener('click', downloadBilling);
-    document.getElementById('refresh-map').addEventListener('click', () => {
-      ensureMap();
-      drawMap();
-      if (mapInstance) {
-        setTimeout(() => mapInstance.invalidateSize(), 80);
-      }
-    });
-    document.getElementById('toggle-labels').addEventListener('change', event => {
-      if (!labelLayer) return;
-      if (event.target.checked) {
-        labelLayer.addTo(mapInstance);
-      } else {
-        labelLayer.remove();
-      }
-    });
-    document.getElementById('add-range').addEventListener('click', () => addRangeRow({ min: 0, max: 0, color: '#cccccc' }));
-    document.getElementById('reset-ranges').addEventListener('click', resetRanges);
-    document.getElementById('save-ranges').addEventListener('click', saveRanges);
-  }
-
-  async function init() {
-    updatePublishIndicators();
-    setupTabNavigation();
-    setupEventHandlers();
-    await loadFromStorage();
-    log('Ready. Upload billing totals and ZIP boundaries to get started.');
-  }
-
-  return { init };
-})();
-
-document.addEventListener('DOMContentLoaded', App.init);
-/* =========================
-   8) Init (try publishing if data already present)
-   ========================= */
-document.addEventListener('DOMContentLoaded', async ()=>{
-  await refreshLocalStatus();
-  // If user already uploaded earlier in this browser, publish right away
-  autoPublish();
-});
-</script>
-</body>
-</html>
+            const markers = [];
+            for (const feature of zipShapes.features) {
+                try {
+                    const centroid = tu
