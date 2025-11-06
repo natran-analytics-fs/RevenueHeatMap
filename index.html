@@ -505,37 +505,53 @@
     <script>
         // ============= CONFIGURATION =============
         const PUBLISH_CFG = {
-            owner: 'natran-analytics-fs',        // e.g., 'yourusername'
-            repo: 'RevenueHeatMap',         // e.g., 'houston-revenue'
+            owner: '',        // e.g., 'yourusername'
+            repo: '',         // e.g., 'houston-revenue'
             branch: 'main',
-            token: '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'         // GitHub Personal Access Token
+            token: ''         // GitHub Personal Access Token
         };
 
         const HOUSTON_BBOX = [-95.9, 29.5, -95.0, 30.2];
 
         const DEFAULT_RANGES = [
-            { min: 0, max: 10000, color: '#fef3c7' },
-            { min: 10000, max: 50000, color: '#fcd34d' },
-            { min: 50000, max: 100000, color: '#f59e0b' },
-            { min: 100000, max: 500000, color: '#ea580c' },
-            { min: 500000, max: Infinity, color: '#dc2626' }
+            { min: 2000, max: 5000, color: '#FF0000' },
+            { min: 5000, max: 15000, color: '#FFC0CB' },
+            { min: 15000, max: 30000, color: '#FFFF00' },
+            { min: 30000, max: 50000, color: '#90EE90' },
+            { min: 50000, max: 80000, color: '#228B22' },
+            { min: 80000, max: Infinity, color: '#1E90FF' }
         ];
 
         // ============= STATE =============
         let billingData = {};
         let zipShapes = null;
         let colorRanges = [...DEFAULT_RANGES];
-        let elseColor = '#6b7280';
+        let elseColor = '#FFFFFF';
         let map = null;
         let geoJsonLayer = null;
         let labelLayer = null;
         let labelsVisible = false;
 
         // ============= STORAGE =============
-        const store = window.idbKeyval || {
-            get: async (key) => localStorage.getItem(key) ? JSON.parse(localStorage.getItem(key)) : null,
-            set: async (key, val) => localStorage.setItem(key, JSON.stringify(val)),
-            del: async (key) => localStorage.removeItem(key)
+        const store = {
+            get: async (key) => {
+                try {
+                    const val = localStorage.getItem(key);
+                    return val ? JSON.parse(val) : null;
+                } catch (e) {
+                    return null;
+                }
+            },
+            set: async (key, val) => {
+                try {
+                    localStorage.setItem(key, JSON.stringify(val));
+                } catch (e) {
+                    console.error('Storage error:', e);
+                }
+            },
+            del: async (key) => {
+                localStorage.removeItem(key);
+            }
         };
 
         // ============= LOGGING =============
@@ -623,8 +639,7 @@
             
             for (const file of files) {
                 try {
-                    const data = await readFile(file);
-                    const parsed = parseBillingData(data, file.name);
+                    const parsed = await parseBillingFile(file);
                     Object.assign(billingData, parsed);
                     log(`✓ Processed ${file.name}: ${Object.keys(parsed).length} ZIPs`, 'success');
                 } catch (err) {
@@ -662,196 +677,179 @@
             }
         }
 
-        function readFile(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = reject;
-                
-                if (file.name.endsWith('.csv')) {
-                    reader.readAsText(file);
-                } else {
-                    reader.readAsArrayBuffer(file);
-                }
-            });
+        // ============= BILLING PARSING (Based on your Colab) =============
+        async function parseBillingFile(file) {
+            const result = {};
+            const filename = file.name.toLowerCase();
+
+            if (filename.endsWith('.csv')) {
+                const text = await file.text();
+                return parseCSVBilling(text);
+            } else if (filename.endsWith('.xls') || filename.endsWith('.xlsx')) {
+                const buffer = await file.arrayBuffer();
+                return parseExcelBilling(buffer, file.name);
+            }
+
+            throw new Error('Unsupported file format');
         }
 
-        function parseBillingData(data, filename) {
+        function parseCSVBilling(text) {
             const result = {};
+            const lines = text.split('\n').filter(l => l.trim());
             
-            if (filename.endsWith('.csv')) {
-                const lines = data.split('\n').filter(l => l.trim());
-                if (lines.length < 2) return result;
+            if (lines.length < 2) return result;
+            
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+            const zipCol = headers.findIndex(h => h.includes('zip') || h.includes('subgroup'));
+            const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
+            
+            if (zipCol === -1 || amtCol === -1) {
+                throw new Error(`Could not find ZIP and Amount columns. Found: ${headers.join(', ')}`);
+            }
+            
+            for (let i = 1; i < lines.length; i++) {
+                const cols = lines[i].split(',').map(c => c.trim().replace(/"/g, ''));
+                if (cols.length <= Math.max(zipCol, amtCol)) continue;
                 
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-                const zipCol = headers.findIndex(h => h.includes('zip'));
-                const amtCol = headers.findIndex(h => h.includes('amount') || h.includes('revenue') || h.includes('total'));
+                const zipStr = cols[zipCol];
+                const amtStr = cols[amtCol];
                 
-                if (zipCol === -1 || amtCol === -1) {
-                    throw new Error('Could not find ZIP or Amount columns');
-                }
+                // Extract ZIP (first 5 digits)
+                const zipMatch = zipStr.match(/(\d{5})/);
+                if (!zipMatch) continue;
+                const zip = zipMatch[1];
                 
-                for (let i = 1; i < lines.length; i++) {
-                    const cols = lines[i].split(',');
-                    if (cols.length <= Math.max(zipCol, amtCol)) continue;
-                    
-                    const zip = cols[zipCol].trim().replace(/"/g, '');
-                    const amt = parseFloat(cols[amtCol].replace(/[^0-9.-]/g, ''));
-                    
-                    if (zip && !isNaN(amt)) {
-                        result[zip] = (result[zip] || 0) + amt;
-                    }
-                }
-            } else {
-                // Excel file
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const json = XLSX.utils.sheet_to_json(sheet);
+                // Skip "Unspecified"
+                if (zipStr.toLowerCase().includes('unspecified')) continue;
                 
-                for (const row of json) {
-                    const keys = Object.keys(row);
-                    const zipKey = keys.find(k => k.toLowerCase().includes('zip'));
-                    const amtKey = keys.find(k => k.toLowerCase().includes('amount') || k.toLowerCase().includes('revenue') || k.toLowerCase().includes('total'));
-                    
-                    if (zipKey && amtKey) {
-                        const zip = String(row[zipKey]).trim();
-                        const amt = parseFloat(String(row[amtKey]).replace(/[^0-9.-]/g, ''));
-                        
-                        if (zip && !isNaN(amt)) {
-                            result[zip] = (result[zip] || 0) + amt;
-                        }
-                    }
-                }
+                // Parse amount
+                const amt = parseFloat(amtStr.replace(/[^0-9.-]/g, ''));
+                if (isNaN(amt)) continue;
+                
+                result[zip] = (result[zip] || 0) + amt;
             }
             
             return result;
         }
 
+        function parseExcelBilling(buffer, filename) {
+            const result = {};
+            
+            try {
+                const workbook = XLSX.read(buffer, { type: 'array' });
+                
+                // Look for "Subgroup Entries" sheet
+                let sheetName = null;
+                for (const name of workbook.SheetNames) {
+                    const lower = name.toLowerCase();
+                    if (lower.includes('subgroup') && lower.includes('entr')) {
+                        sheetName = name;
+                        break;
+                    }
+                }
+                
+                if (!sheetName) {
+                    sheetName = workbook.SheetNames[0];
+                }
+                
+                const sheet = workbook.Sheets[sheetName];
+                const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                
+                if (data.length < 2) return result;
+                
+                // Find columns
+                const headers = data[0].map(h => String(h || '').trim().toLowerCase());
+                const zipCol = headers.findIndex(h => h.includes('subgroup') || h.includes('zip'));
+                const amtCol = headers.findIndex(h => h.includes('billed') || h.includes('amount') || h.includes('revenue'));
+                
+                if (zipCol === -1 || amtCol === -1) {
+                    throw new Error(`Could not find required columns in ${filename}`);
+                }
+                
+                // Process rows
+                for (let i = 1; i < data.length; i++) {
+                    const row = data[i];
+                    if (!row || row.length <= Math.max(zipCol, amtCol)) continue;
+                    
+                    const zipVal = String(row[zipCol] || '').trim();
+                    const amtVal = row[amtCol];
+                    
+                    // Skip unspecified
+                    if (zipVal.toLowerCase() === 'unspecified') continue;
+                    
+                    // Extract 5-digit ZIP
+                    const zipMatch = zipVal.match(/(\d{5})/);
+                    if (!zipMatch) continue;
+                    const zip = zipMatch[1];
+                    
+                    // Parse amount
+                    const amt = parseFloat(String(amtVal).replace(/[^0-9.-]/g, ''));
+                    if (isNaN(amt)) continue;
+                    
+                    result[zip] = (result[zip] || 0) + amt;
+                }
+                
+            } catch (err) {
+                throw new Error(`Excel parsing error: ${err.message}`);
+            }
+            
+            return result;
+        }
+
+        // ============= SHAPEFILE PARSING =============
         async function parseShapeFile(file) {
-            if (file.name.endsWith('.geojson')) {
+            if (file.name.toLowerCase().endsWith('.geojson')) {
                 const text = await file.text();
                 return JSON.parse(text);
-            } else {
-                // Shapefile ZIP
+            } else if (file.name.toLowerCase().endsWith('.zip')) {
                 const buffer = await file.arrayBuffer();
                 const geojson = await shp(buffer);
-                return Array.isArray(geojson) ? { type: 'FeatureCollection', features: geojson } : geojson;
+                
+                // shpjs can return array or FeatureCollection
+                if (Array.isArray(geojson)) {
+                    return {
+                        type: 'FeatureCollection',
+                        features: geojson.flatMap(item => 
+                            item.type === 'FeatureCollection' ? item.features : [item]
+                        )
+                    };
+                }
+                
+                return geojson;
             }
+            
+            throw new Error('Unsupported shape file format');
         }
 
         function processZipShapes(features) {
-            const bbox = turf.bboxPolygon(HOUSTON_BBOX);
-            let processed = [];
+            const processed = [];
+            const bbox = turf.bbox(turf.bboxPolygon(HOUSTON_BBOX));
 
             for (const feature of features) {
                 try {
+                    // Skip if no geometry
+                    if (!feature.geometry) continue;
+                    
                     // Clip to Houston bbox
-                    const clipped = turf.bboxClip(feature, HOUSTON_BBOX);
+                    let clipped;
+                    try {
+                        clipped = turf.bboxClip(feature, bbox);
+                    } catch (e) {
+                        clipped = feature;
+                    }
                     
                     // Simplify geometry
-                    const simplified = turf.simplify(clipped, { tolerance: 0.001 });
-                    
-                    // Normalize properties
-                    const zipCode = feature.properties.ZCTA5CE10 || 
-                                   feature.properties.ZCTA5CE20 || 
-                                   feature.properties.ZIP || 
-                                   feature.properties.ZIPCODE ||
-                                   feature.properties.zip;
-                    
-                    if (zipCode) {
-                        simplified.properties = { ZIP: String(zipCode) };
-                        processed.push(simplified);
+                    let simplified;
+                    try {
+                        simplified = turf.simplify(clipped, { tolerance: 0.001, highQuality: false });
+                    } catch (e) {
+                        simplified = clipped;
                     }
-                } catch (err) {
-                    console.warn('Error processing feature:', err);
-                }
-            }
-
-            return {
-                type: 'FeatureCollection',
-                features: processed
-            };
-        }
-
-        // ============= MAP =============
-        function initMap() {
-            map = L.map('map').setView([29.76, -95.37], 10);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-
-            updateMap();
-        }
-
-        function updateMap() {
-            if (!map) return;
-
-            // Remove existing layers
-            if (geoJsonLayer) map.removeLayer(geoJsonLayer);
-            if (labelLayer) map.removeLayer(labelLayer);
-
-            if (!zipShapes) return;
-
-            // Add GeoJSON layer
-            geoJsonLayer = L.geoJSON(zipShapes, {
-                style: (feature) => {
-                    const zip = feature.properties.ZIP;
-                    const revenue = billingData[zip] || 0;
-                    const color = getColorForRevenue(revenue);
                     
-                    return {
-                        fillColor: color,
-                        fillOpacity: 0.7,
-                        color: '#1e293b',
-                        weight: 1
-                    };
-                },
-                onEachFeature: (feature, layer) => {
-                    const zip = feature.properties.ZIP;
-                    const revenue = billingData[zip] || 0;
-                    layer.bindPopup(`
-                        <strong>ZIP:</strong> ${zip}<br>
-                        <strong>Revenue:</strong> $${revenue.toLocaleString()}
-                    `);
-                }
-            }).addTo(map);
-
-            // Fit bounds
-            map.fitBounds(geoJsonLayer.getBounds());
-
-            // Update labels if visible
-            if (labelsVisible) {
-                showLabels();
-            }
-        }
-
-        function getColorForRevenue(revenue) {
-            for (const range of colorRanges) {
-                if (revenue >= range.min && revenue < range.max) {
-                    return range.color;
-                }
-            }
-            return elseColor;
-        }
-
-        function toggleLabels() {
-            labelsVisible = !labelsVisible;
-            const toggle = document.getElementById('labelToggle');
-            toggle.classList.toggle('active', labelsVisible);
-            
-            if (labelsVisible) {
-                showLabels();
-            } else {
-                if (labelLayer) map.removeLayer(labelLayer);
-            }
-        }
-
-        function showLabels() {
-            if (labelLayer) map.removeLayer(labelLayer);
-            if (!zipShapes) return;
-
-            const markers = [];
-            for (const feature of zipShapes.features) {
-                try {
-                    const centroid = tu
+                    // Extract ZIP code from various possible property names
+                    const props = feature.properties || {};
+                    const zipCode = props.ZCTA5CE10 || 
+                                   props.ZCTA5CE20 || 
+                                   props.ZCTA5 ||
+                                   props.ZIP || 
+                                   props.ZIPCODE ||
