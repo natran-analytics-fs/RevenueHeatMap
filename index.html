@@ -32,6 +32,9 @@
   th{position:sticky;top:0;background:#121a2c;text-align:left}
   .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
   .warn{background:#291a1a;border:1px solid #623e3e;color:#ffbdbd;padding:8px 10px;border-radius:10px}
+  .status-log{margin-top:10px;font-size:12px;line-height:1.5;max-height:120px;overflow:auto;padding:10px;border-radius:10px;background:#12192b;border:1px solid #1f2945}
+  .status-log b{color:#6aa6ff}
+  .status-log .err{color:#ff8686}
   .ok{color:#4caf50}
   .zip-label div{padding:2px 4px;border-radius:6px;background:rgba(255,255,255,0.7);color:#0a1020;font-weight:600;box-shadow:0 0 6px rgba(0,0,0,0.35)}
 </style>
@@ -91,6 +94,7 @@
         <div class="col"><span class="chip" id="chip-ranges">ranges.json</span></div>
       </div>
       <div class="tiny muted" id="pub-status" style="margin-top:8px">Awaiting uploads…</div>
+      <div id="status-log" class="status-log"></div>
     </div>
   </section>
 
@@ -267,6 +271,26 @@ function showPublishBanner(){
 }
 showPublishBanner();
 
+const statusLogEl = document.getElementById('status-log');
+let lastStatusMessage = '';
+function logStatus(message, { error=false } = {}){
+  if(!statusLogEl) return;
+  const key = `${error?'ERR:':'OK:'}${message}`;
+  if(key === lastStatusMessage) return;
+  lastStatusMessage = key;
+  const ts = new Date().toLocaleTimeString();
+  const line = document.createElement('div');
+  const stamp = document.createElement('b');
+  stamp.textContent = `[${ts}]`;
+  const span = document.createElement('span');
+  span.textContent = ` ${message}`;
+  if(error) span.classList.add('err');
+  line.appendChild(stamp);
+  line.appendChild(span);
+  statusLogEl.prepend(line);
+  while(statusLogEl.children.length>60){ statusLogEl.removeChild(statusLogEl.lastChild); }
+}
+
 /* =========================
    3) Color ranges
    ========================= */
@@ -353,6 +377,18 @@ billingInput.onchange = async (e)=>{
       if(!isFinite(amt)){ skipped++; continue; }
       totals.set(zip, (totals.get(zip)||0)+amt);
     }
+    const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
+    await dbSet(DB.BILLING, list);
+    await refreshLocalStatus();
+    billingStatus.textContent =
+      `Processed ${files.length} file(s) • scanned ${scanned} rows (${skipped} skipped) → ${list.length} ZIP rows.`;
+    logStatus(`Billing totals saved (${list.length} ZIP rows).`);
+    // auto-publish
+    autoPublish({ billing: list });
+    maybeAutoMap();
+  }finally{
+    billingInput.value='';
+    billingInput.disabled = false;
   }
   const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
   await dbSet(DB.BILLING, list);
@@ -399,16 +435,32 @@ const zctaStatus=document.getElementById('zcta-status');
 zctaInput.onchange = async (e)=>{
   const files=[...e.target.files];
   if(!files.length) return;
-
-  const fcList=[];
-  for(const f of files){
-    if(/\.zip$/i.test(f.name)){
-      const buf=await f.arrayBuffer();
-      const fc=await shp(buf);
-      fcList.push(fc);
-    }else{
-      const fc=JSON.parse(await f.text());
-      fcList.push(fc);
+  zctaInput.disabled = true;
+  try{
+    const fcList=[];
+    for(const f of files){
+      try{
+        if(/\.zip$/i.test(f.name)){
+          const buf=await f.arrayBuffer();
+          const fc=await shp(buf);
+          if(!fc){
+            logStatus(`Zip ${f.name} did not contain a readable shapefile.`, {error:true});
+            continue;
+          }
+          fcList.push(fc);
+        }else{
+          const text=await f.text();
+          try{
+            const fc=JSON.parse(text);
+            fcList.push(fc);
+          }catch(jsonErr){
+            logStatus(`Failed to parse ${f.name} as GeoJSON.`, {error:true});
+          }
+        }
+      }catch(err){
+        console.error(err);
+        logStatus(`Failed to parse ${f.name}: ${err.message||err}`, {error:true});
+      }
     }
   }
 
@@ -434,13 +486,36 @@ zctaInput.onchange = async (e)=>{
   const bbox = [-96.3, 28.8, -94.9, 30.3];
   const clipped = turf.bboxClip(all, bbox);
 
-  // Normalize & simplify
-  clipped.features.forEach(f=>{
-    const p=f.properties||{};
-    if(!p.ZCTA5CE10) p.ZCTA5CE10 = p.ZCTA5CE20 || p.GEOID10 || p.GEOID || p.zip || '';
-    f.properties=p;
-  });
-  const simplified = turf.simplify(clipped, {tolerance:0.0012, highQuality:false, mutate:false});
+    // Merge → FeatureCollection
+    const allFeatures=[];
+    for(const fc of fcList){
+      if(!fc) continue;
+      if(Array.isArray(fc)){
+        allFeatures.push(...fc);
+      }else if(fc.type==='FeatureCollection'){
+        allFeatures.push(...(fc.features||[]));
+      }else if(fc.type==='Feature'){
+        allFeatures.push(fc);
+      }
+    }
+    const valid = allFeatures.filter(f=>f && f.geometry && /(Polygon|MultiPolygon)/.test(f.geometry.type||''));
+    if(!valid.length){
+      zctaStatus.textContent = 'No valid polygon features found in uploads.';
+      logStatus('No polygon features detected — ensure the ZIP/ZCTA shapefile is selected.', {error:true});
+      return;
+    }
+    const all = { type:'FeatureCollection', features: valid };
+
+    // Subset to a Houston-ish bbox (fast and small). Adjust if needed.
+    const bbox = [-96.3, 28.8, -94.9, 30.3];
+    let clipped;
+    try{
+      clipped = turf.bboxClip(all, bbox);
+    }catch(err){
+      console.error(err);
+      logStatus(`Failed to clip shapefile to Houston bbox: ${err.message||err}`, {error:true});
+      clipped = all;
+    }
 
   await dbSet(DB.ZCTA, simplified);
   await refreshLocalStatus();
@@ -522,7 +597,11 @@ async function getRanges(){
 async function drawChoropleth(){
   const billing = await dbGet(DB.BILLING) || [];
   const zctas = await dbGet(DB.ZCTA);
-  if(!billing.length || !zctas){ alert('Please upload & process billing and shapes first.'); return; }
+  if(!billing.length || !zctas){
+    logStatus('Map refresh skipped — billing or shapes missing.', {error:true});
+    alert('Please upload & process billing and shapes first.');
+    return;
+  }
   const cfg = await getRanges();
   const ranges = cfg.ranges || []; const elseColor = cfg.else;
 
@@ -564,6 +643,12 @@ async function renderTable(){
   const tbody = document.querySelector('#tbl tbody');
   tbody.innerHTML = billing.map(r=>`<tr><td>${r.zip}</td><td>$${fmtUSD(r.revenue)}</td></tr>`).join('');
 }
+async function maybeAutoMap(){
+  const [billing,zcta] = await Promise.all([dbGet(DB.BILLING), dbGet(DB.ZCTA)]);
+  if(billing && billing.length && zcta && !document.getElementById('tab-map').hidden){
+    drawChoropleth();
+  }
+}
 document.getElementById('download-json').onclick = async ()=>{
   const billing = await dbGet(DB.BILLING) || [];
   const blob = new Blob([JSON.stringify(billing,null,2)], {type:'application/json'});
@@ -576,6 +661,7 @@ document.getElementById('download-json').onclick = async ()=>{
 async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
   if(!(PUBLISH_CFG.owner && PUBLISH_CFG.repo && PUBLISH_CFG.branch && PUBLISH_CFG.token)){
     document.getElementById('pub-status').textContent = 'Auto-publish skipped (no repo config).';
+    logStatus('Auto-publish skipped — missing repository configuration.', {error:true});
     showPublishBanner();
     return;
   }
@@ -586,6 +672,7 @@ async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
   const pub = document.getElementById('pub-status');
   if(!billing.length || !zcta || !ranges){
     pub.textContent = 'Waiting for complete data (billing + shapes + ranges)…';
+    logStatus('Auto-publish waiting for complete data (billing + shapes + ranges).');
     return;
   }
 
@@ -622,11 +709,14 @@ async function autoPublish({ billing=null, zcta=null, ranges=null } = {}){
 
   try{
     pub.textContent = 'Publishing updated data…';
+    logStatus('Publishing data to GitHub…');
     for(const p of payloads) { await putFile(p); }
     pub.textContent = 'Published ✔ — refresh your Pages site to see updates.';
+    logStatus('Auto-publish complete.');
   }catch(e){
     console.error(e);
     pub.textContent = 'Publish error. Check token (contents: write) and branch name.';
+    logStatus(`Publish error: ${e.message||e}`, {error:true});
   }
 }
 
