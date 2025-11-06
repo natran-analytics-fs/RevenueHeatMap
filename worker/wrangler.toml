@@ -1,0 +1,8 @@
+name = "heatmap-publish-proxy"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+GH_OWNER = "CHANGE_ME_OWNER"
+GH_REPO  = "CHANGE_ME_REPO"
+CORS_ORIGIN = "https://CHANGE_ME.github.io"
