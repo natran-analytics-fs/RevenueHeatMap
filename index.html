@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Houston Revenue by ZIP — Uploader Edition</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{--bg:#0b0f19;--panel:#131a2a;--muted:#99a3b3;--text:#e8eefc;--accent:#6aa6ff;--chip:#1b2438}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;gap:12px;align-items:center;padding:14px 18px;background:#0f1524;border-bottom:1px solid #1d2740}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  nav{margin-left:auto;display:flex;gap:8px}
+  nav button{background:var(--chip);color:var(--text);border:1px solid #2a3654;padding:8px 12px;border-radius:10px;cursor:pointer}
+  nav button.active{background:var(--accent);color:#0a0f1c;border-color:transparent}
+  main{padding:18px}
+  .panel{background:var(--panel);border:1px solid #1d2740;border-radius:14px;padding:14px;margin-bottom:16px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .col{flex:1 1 320px}
+  .muted{color:var(--muted)}
+  .chip{background:var(--chip);padding:6px 10px;border-radius:999px;border:1px solid #263252;font-size:12px;margin-right:6px}
+  #map{height:64vh;border-radius:12px;border:1px solid #223055}
+  .btn{background:#16213a;color:var(--text);border:1px solid #29406d;padding:8px 10px;border-radius:10px;cursor:pointer}
+  .btn.accent{background:var(--accent);color:#0b0f19;border-color:transparent}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 10px;border-bottom:1px solid #1f2945;white-space:nowrap}
+  th{position:sticky;top:0;background:#121a2c;text-align:left}
+  .range-row{display:grid;grid-template-columns:120px 120px 120px auto;gap:8px;align-items:center;margin:6px 0}
+  .note{font-size:12px;color:#a9b5ca}
+  .tiny{font-size:12px}
+  input[type="file"]{display:block;margin-top:8px}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding:2px 6px; background:#121a2c; border:1px solid #1f2945; border-radius:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Houston Revenue by ZIP</h1>
+  <nav>
+    <button data-tab="upload" class="active">Data Upload / Status</button>
+    <button data-tab="map">Map</button>
+    <button data-tab="table">Table</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Upload / Status -->
+  <section id="tab-upload" class="tab">
+    <div class="panel">
+      <h3>Upload Data (processed client-side; nothing is uploaded to servers)</h3>
+      <div class="row">
+        <div class="col">
+          <h4>Billing (.csv / .xls / .xlsx)</h4>
+          <p class="tiny muted">Columns like <span class="kbd">Zip</span> / <span class="kbd">Zip Code</span> and <span class="kbd">Billed</span> / <span class="kbd">Revenue</span> are auto-detected.</p>
+          <input id="billing-files" type="file" accept=".csv,.xls,.xlsx" multiple />
+          <div id="billing-status" class="tiny muted">No billing data in storage.</div>
+        </div>
+        <div class="col">
+          <h4>ZIP Shapes (Shapefile ZIP or GeoJSON)</h4>
+          <p class="tiny muted">Upload either a <span class="kbd">.zip</span> of a shapefile (ZCTA) or a <span class="kbd">.geojson</span>. The app will subset to the 8-county Houston area.</p>
+          <input id="zcta-file" type="file" accept=".zip,.geojson,.json" />
+          <div id="zcta-status" class="tiny muted">No shapes in storage.</div>
+        </div>
+      </div>
+      <div class="note" style="margin-top:8px">
+        Processed results are stored in your browser (IndexedDB). To make them visible to everyone, use <b>Publish processed data</b> below — this writes only the small artifacts to your repo (billing.json & simplified houston_zctas.geojson).
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Color ranges</h3>
+      <div id="ranges"></div>
+      <div>
+        <button id="add-range" class="btn">+ Add range</button>
+        <button id="save-ranges" class="btn accent">Save ranges</button>
+        <span class="note">Order matters (top→bottom). “Else” color applies if no range matches; ≤ 2000 is transparent.</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Publish processed data to GitHub (optional)</h3>
+      <p class="tiny muted">Publishes only <span class="kbd">/data/billing.json</span> and <span class="kbd">/data/houston_zctas.geojson</span> to your repo via GitHub API — keeps files small, bypassing the 25MB web upload limit.</p>
+      <div class="row">
+        <div class="col"><label class="tiny muted">Owner</label><input id="gh-owner" placeholder="your-github-user" class="btn" /></div>
+        <div class="col"><label class="tiny muted">Repo</label><input id="gh-repo" placeholder="your-repo" class="btn" /></div>
+        <div class="col"><label class="tiny muted">Branch</label><input id="gh-branch" value="main" class="btn" /></div>
+        <div class="col"><label class="tiny muted">Token</label><input id="gh-token" type="password" placeholder="ghp_xxx" class="btn" /></div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="col"><button id="publish" class="btn accent">Publish processed data → /data</button></div>
+        <div class="col tiny muted" id="publish-status"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Map -->
+  <section id="tab-map" class="tab" hidden>
+    <div class="panel">
+      <div class="tiny muted">Tiles: OpenStreetMap • Toggle ZIP labels</div>
+      <label class="tiny"><input type="checkbox" id="toggle-labels" checked/> Show ZIP labels</label>
+      <button id="refresh-map" class="btn" style="margin-left:8px">Refresh</button>
+    </div>
+    <div id="map"></div>
+  </section>
+
+  <!-- Table -->
+  <section id="tab-table" class="tab" hidden>
+    <div class="panel">
+      <div class="tiny muted">ZIP → Revenue (from processed billing.json in your browser)</div>
+      <button id="download-json" class="btn">Download billing.json</button>
+    </div>
+    <div style="overflow:auto;border:1px solid #223055;border-radius:10px">
+      <table id="tbl">
+        <thead><tr><th data-k="zip">ZIP</th><th data-k="revenue">Revenue</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- libs -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/idb-keyval@6/dist/idb-keyval.iife.js"></script>
+
+<script>
+// Tabs
+const tabs = document.querySelectorAll('nav button');
+const sections = { upload: document.getElementById('tab-upload'), map: document.getElementById('tab-map'), table: document.getElementById('tab-table') };
+tabs.forEach(b=> b.onclick=()=>{ tabs.forEach(x=>x.classList.remove('active')); b.classList.add('active'); for(const [k,el] of Object.entries(sections)) el.hidden=(b.dataset.tab!==k); if(b.dataset.tab==='map') ensureMap(); if(b.dataset.tab==='table') renderTable(); });
+
+const { set:dbSet, get:dbGet } = idbKeyval;
+const DB = { BILLING:'billing-local', ZCTA:'zcta-local', RANGES:'ranges' };
+
+const fmtUSD = n => Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+
+// Color ranges
+const DEFAULT_RANGES=[
+  {min:2001,max:5000,color:'#FF0000'},
+  {min:5001,max:15000,color:'#FFC0CB'},
+  {min:15001,max:30000,color:'#FFFF00'},
+  {min:30001,max:50000,color:'#90EE90'},
+  {min:50001,max:80000,color:'#228B22'},
+];
+let ELSE_COLOR='#1E90FF';
+
+const rangesDiv=document.getElementById('ranges');
+document.getElementById('add-range').onclick=()=>addRangeRow({min:0,max:0,color:'#cccccc'});
+document.getElementById('save-ranges').onclick=saveRanges;
+
+(async function initRanges(){
+  let r=await dbGet(DB.RANGES);
+  if(!r){ r={ranges:DEFAULT_RANGES, else:ELSE_COLOR}; await dbSet(DB.RANGES, r); }
+  rangesDiv.innerHTML=''; (r.ranges||DEFAULT_RANGES).forEach(addRangeRow); addElseRow(r.else||ELSE_COLOR);
+})();
+
+function addRangeRow({min,max,color}){
+  const row=document.createElement('div'); row.className='range-row';
+  row.innerHTML=`<input type="number" value="${min}"/><input type="number" value="${max}"/><input type="color" value="${color}"/><button class="btn">Remove</button>`;
+  row.querySelector('button').onclick=()=>row.remove();
+  rangesDiv.appendChild(row);
+}
+function addElseRow(col){
+  const row=document.createElement('div'); row.className='range-row'; row.dataset.else='true';
+  row.innerHTML=`<div class="tiny muted">Else color</div><div></div><input type="color" value="${col}"/><span class="note">used when value not in any range; ≤2000 transparent</span>`;
+  rangesDiv.appendChild(row);
+}
+async function saveRanges(){
+  const rows=[...rangesDiv.querySelectorAll('.range-row')];
+  const out=[]; let elseCol=ELSE_COLOR;
+  for(const r of rows){
+    if(r.dataset.else){ elseCol=r.querySelector('input[type=color]').value; continue; }
+    const [a,b]=r.querySelectorAll('input[type=number]'); const c=r.querySelector('input[type=color]').value;
+    out.push({min:Number(a.value), max:Number(b.value), color:c});
+  }
+  await dbSet(DB.RANGES, {ranges:out, else:elseCol});
+  alert('Saved color ranges.');
+}
+async function getRanges(){
+  let r=await dbGet(DB.RANGES);
+  if(!r) r={ranges:DEFAULT_RANGES, else:ELSE_COLOR};
+  return r;
+}
+function pickColor(v, ranges, elseColor){
+  for(const r of ranges){ if(v>=r.min && v<=r.max) return r.color; }
+  if(v<=2000) return 'transparent';
+  return elseColor||'#1E90FF';
+}
+
+// Upload & process BILLING files
+const billingInput=document.getElementById('billing-files');
+const billingStatus=document.getElementById('billing-status');
+billingInput.onchange = async (e)=>{
+  const files=[...e.target.files];
+  if(!files.length) return;
+  const totals=new Map();
+  for(const f of files){
+    const buf=await f.arrayBuffer();
+    let rows=[];
+    if(/\.(csv)$/i.test(f.name)){
+      // simple CSV parse
+      const text=new TextDecoder().decode(buf);
+      rows=csvToRows(text);
+    }else{
+      const wb=XLSX.read(buf,{type:'array'}); const ws=wb.Sheets[wb.SheetNames[0]];
+      rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+    }
+    for(const r of rows){
+      const raw=(r['Zip']||r['Zip Code']||r['ZCTA']||r['zip']||r['zip code']||r['postal']||'').toString();
+      const m=raw.match(/(\d{5})/); if(!m) continue;
+      const zip=m[1];
+      const val=(r['Billed']??r['Revenue']??r['Amount']??r['Total']??0).toString().replace(/[, ]/g,'');
+      const amt=Number(val); if(!isFinite(amt)) continue;
+      totals.set(zip, (totals.get(zip)||0)+amt);
+    }
+  }
+  const list=[...totals.entries()].map(([zip,revenue])=>({zip,revenue})).sort((a,b)=>b.revenue-a.revenue);
+  await dbSet(DB.BILLING, list);
+  billingStatus.textContent = `Processed ${list.length} ZIP rows • stored locally.`;
+  alert('Billing processed and stored locally.');
+};
+function csvToRows(text){
+  // tiny CSV parser for common cases
+  const lines=text.split(/\r?\n/).filter(Boolean);
+  const head=lines.shift().split(',').map(s=>s.trim());
+  return lines.map(ln=>{
+    const cols=splitCSV(ln);
+    const o={}; head.forEach((h,i)=>o[h]=cols[i]??''); return o;
+  });
+}
+function splitCSV(line){
+  const out=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(ch==='\"'){ inQ=!inQ; continue; }
+    if(ch===',' && !inQ){ out.push(cur); cur=''; continue; }
+    cur+=ch;
+  }
+  out.push(cur); return out.map(s=>s.trim());
+}
+
+// Upload & process SHAPEFILE / GEOJSON
+const zctaInput=document.getElementById('zcta-file');
+const zctaStatus=document.getElementById('zcta-status');
+zctaInput.onchange = async (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  let gj=null;
+  if(/\.zip$/i.test(f.name)){
+    const buf=await f.arrayBuffer();
+    gj = await shp(buf); // convert to GeoJSON (FeatureCollection)
+  }else{
+    gj = JSON.parse(await f.text());
+  }
+  // Subset to the 8 Houston counties using a rough bbox or county union mask if provided later.
+  // Here we use a bbox around Houston to keep it simple and small.
+  const bbox = [-96.3, 28.8, -94.9, 30.3];
+  const clipped = turf.bboxClip(gj, bbox);
+  // Simplify to reduce size
+  const simplified = turf.simplify(clipped, {tolerance: 0.0008, highQuality:false, mutate:false});
+  // Normalize ZIP field name to ZCTA5CE10 if missing
+  simplified.features.forEach(f=>{
+    const p=f.properties||{};
+    if(!p.ZCTA5CE10){
+      p.ZCTA5CE10 = p.ZCTA5CE20 || p.GEOID10 || p.GEOID || p.zip || '';
+    }
+    f.properties=p;
+  });
+  await dbSet(DB.ZCTA, simplified);
+  zctaStatus.textContent = `Shapes stored locally • features: ${simplified.features.length}`;
+  alert('ZCTA shapes processed & stored locally.');
+};
+
+// Map
+let map, geoLayer, labelLayer;
+function ensureMap(){
+  if(!map){
+    map = L.map('map', { zoomControl:true, preferCanvas:true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
+  }
+  drawChoropleth();
+}
+document.getElementById('refresh-map').onclick = ()=> drawChoropleth();
+document.getElementById('toggle-labels').onchange = ()=>{
+  if(!labelLayer) return;
+  const checked=document.getElementById('toggle-labels').checked;
+  if(checked) labelLayer.addTo(map); else map.removeLayer(labelLayer);
+};
+function centroid(geom){
+  const polys = geom.type==='Polygon' ? [geom.coordinates] : geom.type==='MultiPolygon' ? geom.coordinates : null;
+  if(!polys || !polys.length) return null;
+  const ring = polys[0][0]; let x=0,y=0; for(const p of ring){ x+=p[0]; y+=p[1]; }
+  return [x/ring.length, y/ring.length];
+}
+async function drawChoropleth(){
+  const billing = await dbGet(DB.BILLING) || [];
+  const zctas = await dbGet(DB.ZCTA);
+  if(!billing.length || !zctas){ alert('Please upload & process billing and shapes first.'); return; }
+  const {ranges, else:elseColor} = await getRanges();
+  const revByZip = new Map(billing.map(r=>[r.zip, r.revenue]));
+
+  if(geoLayer) map.removeLayer(geoLayer);
+  if(labelLayer) map.removeLayer(labelLayer);
+  labelLayer=L.layerGroup();
+
+  geoLayer = L.geoJSON(zctas, {
+    style: f=>{
+      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || f.properties.GEOID10 || '').toString().padStart(5,'0');
+      const v = revByZip.get(zip) || 0;
+      const col = pickColor(v, ranges, elseColor);
+      return { color:'#555', weight:0.4, fillColor:col, fillOpacity: col==='transparent'? 0.06 : 0.85 };
+    },
+    onEachFeature:(f,layer)=>{
+      const zip = (f.properties.ZCTA5CE10 || f.properties.ZCTA || '').toString().padStart(5,'0');
+      const v = revByZip.get(zip) || 0;
+      layer.bindTooltip(`ZIP ${zip}<br>$${fmtUSD(v)}`, {sticky:true});
+      const c = centroid(f.geometry);
+      if(c){
+        const divIcon = L.divIcon({ className:'zip-label', html:`<div style="font-size:11px;font-weight:700;-webkit-text-stroke:2px white;color:black; mix-blend-mode:multiply">${zip}</div>`});
+        const marker = L.marker([c[1], c[0]], { icon: divIcon });
+        marker.addTo(labelLayer);
+      }
+    }
+  }).addTo(map);
+  if(document.getElementById('toggle-labels').checked) labelLayer.addTo(map);
+  try{ map.fitBounds(geoLayer.getBounds(), {padding:[20,20]}); }catch(e){}
+}
+
+// Table
+async function renderTable(){
+  const billing = await dbGet(DB.BILLING) || [];
+  const tbody = document.querySelector('#tbl tbody');
+  tbody.innerHTML = billing.map(r=>`<tr><td>${r.zip}</td><td>$${fmtUSD(r.revenue)}</td></tr>`).join('');
+}
+document.getElementById('download-json').onclick = async ()=>{
+  const billing = await dbGet(DB.BILLING) || [];
+  const blob = new Blob([JSON.stringify(billing,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'billing.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+
+// Publish processed artifacts to GitHub
+async function publishToRepo(){
+  const owner = document.getElementById('gh-owner').value.trim();
+  const repo = document.getElementById('gh-repo').value.trim();
+  const branch = (document.getElementById('gh-branch').value.trim()||'main');
+  const token = document.getElementById('gh-token').value.trim();
+  const status = document.getElementById('publish-status');
+  if(!owner||!repo||!token){ status.textContent='Owner, repo, and token required.'; return; }
+
+  // 1) Gather processed small artifacts
+  const billing = await dbGet(DB.BILLING) || [];
+  const zctas = await dbGet(DB.ZCTA);
+  if(!billing.length || !zctas){ status.textContent='Process billing and shapes first.'; return; }
+
+  // Simplify further to keep file tiny
+  const zSimple = turf.simplify(zctas, {tolerance:0.0012, highQuality:false});
+  const payloads = [
+    { path:'data/billing.json', content: JSON.stringify(billing) },
+    { path:'data/houston_zctas.geojson', content: JSON.stringify(zSimple) },
+  ];
+
+  const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents/`;
+  async function putFile(p){
+    // get existing SHA (if any)
+    let sha=null;
+    const head = await fetch(apiBase+p.path+`?ref=${branch}`);
+    if(head.ok){ const j=await head.json(); sha=j.sha; }
+    const res = await fetch(apiBase+p.path, {
+      method:'PUT',
+      headers:{ 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        message: `Update ${p.path} from web app`,
+        content: btoa(unescape(encodeURIComponent(p.content))),
+        branch, sha
+      })
+    });
+    if(!res.ok){ throw new Error(`Failed to write ${p.path}: ${res.status}`); }
+  }
+
+  try{
+    status.textContent='Publishing…';
+    for(const p of payloads) await putFile(p);
+    status.textContent='Published! Refresh your Pages site to see updates.';
+  }catch(e){
+    console.error(e);
+    status.textContent='Publish failed. Check token scope (contents: write) and branch.';
+  }
+}
+document.getElementById('publish').onclick = publishToRepo;
+</script>
+</body>
+</html>
