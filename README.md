@@ -14,7 +14,7 @@ This repo contains:
 - `CLOUDFLARE_ACCOUNT_ID` — Your Cloudflare account ID (Workers & Pages dashboard).
 - `DISPATCH_PAT` — Fine-grained PAT with access to this repo (**Contents: Read** OK) used by the Worker to call `repository_dispatch`.
 
-### Cloudflare Worker (Dashboard → Workers & Pages → your Worker → Settings → Variables)
+### Cloudflare Worker (Dashboard → Workers & Pages → your Worker → Settings → Variables
 - **Vars** (non-secret):
   - `GH_OWNER` = `your-github-owner` (e.g., `natran-analytics-fs`)
   - `GH_REPO`  = `your-repo-name` (e.g., `RevenueHeatMap`)
