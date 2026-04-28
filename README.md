@@ -1,5 +1,9 @@
 # Revenue Heatmap — Secure Auto-Publish Setup
 
+> I am trying to do this from Claude.
+
+
+
 This repo contains:
 - `index.html`: client-only app (Leaflet) that uploads billing files & ZIP shapes and posts updates to a proxy.
 - `.github/workflows/publish.yml`: GitHub Action that writes `data/*.json` upon `repository_dispatch`.
